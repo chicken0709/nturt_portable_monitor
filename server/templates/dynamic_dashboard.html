@@ -141,23 +141,78 @@
                     <!-- CAN logging status details will be displayed here -->
                 </div>
             </div>
-        </div>        
+        </div>    
+        
+        <div class="glass-card rounded-lg p-4 mb-6">
+            <h3 class="text-lg font-bold text-white mb-3 flex items-center">
+                <svg class="w-5 h-5 mr-2 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="4" y1="21" x2="4" y2="14"></line>
+                    <line x1="4" y1="10" x2="4" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12" y2="3"></line>
+                    <line x1="20" y1="21" x2="20" y2="16"></line>
+                    <line x1="20" y1="12" x2="20" y2="3"></line>
+                    <line x1="1" y1="14" x2="7" y2="14"></line>
+                    <line x1="9" y1="8" x2="15" y2="8"></line>
+                    <line x1="17" y1="16" x2="23" y2="16"></line>
+                </svg>
+                VCU Controls
+            </h3>
+            
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div class="bg-slate-800/30 rounded-lg p-3 border border-slate-700/50">
+                    <div class="text-[10px] text-slate-400 uppercase tracking-widest mb-1">APPS 1</div>
+                    <div id="vcu-apps1" class="text-[16px] font-mono font-bold text-white">--</div>
+                </div>
+
+                <div class="bg-slate-800/30 rounded-lg p-3 border border-slate-700/50">
+                    <div class="text-[10px] text-slate-400 uppercase tracking-widest mb-1">APPS 2</div>
+                    <div id="vcu-apps2" class="text-[16px] font-mono font-bold text-white">--</div>
+                </div>
+
+                <div class="bg-slate-800/30 rounded-lg p-3 border border-slate-700/50">
+                    <div class="text-[10px] text-slate-400 uppercase tracking-widest mb-1">BSE 1</div>
+                    <div id="vcu-bse1" class="text-[16px] font-mono font-bold text-white">--</div>
+                </div>
+
+                <div class="bg-slate-800/30 rounded-lg p-3 border border-slate-700/50">
+                    <div class="text-[10px] text-slate-400 uppercase tracking-widest mb-1">BSE 2</div>
+                    <div id="vcu-bse2" class="text-[16px] font-mono font-bold text-white">--</div>
+                </div>
+            </div>
+        </div>
 
         <!-- Main Speed and Controls Section -->
         <div class="glass-card rounded-lg p-6 md:p-8 mb-6 flex flex-col items-center justify-center">
             <div class="flex flex-wrap items-center justify-center gap-6 md:gap-12 w-full">
-                <!-- RL Motor -->
-                <div class="flex-shrink-0 text-center order-2 lg:order-1">
-                    <div class="mini-gauge mx-auto">
-                        <div class="mini-circular-gauge" id="rpm-rl-gauge">
-                            <div class="mini-gauge-inner">
-                                <div id="rpm-rl-value" class="text-lg font-bold text-green-400">0</div>
-                                <div class="text-xs text-slate-400">RPM</div>
+                <div class="flex flex-col gap-8 order-2 lg:order-1">
+                    <!-- FL Motor -->
+                    <div class="flex-shrink-0 text-center">
+                        <div class="mini-gauge mx-auto">
+                            <div class="mini-circular-gauge" id="rpm-fl-gauge">
+                                <div class="mini-gauge-inner">
+                                    <div id="rpm-fl-value" class="text-lg font-bold text-green-400">0</div>
+                                    <div class="text-xs text-slate-400">RPM</div>
+                                </div>
                             </div>
                         </div>
+                        <div class="text-xs md:text-sm font-bold text-cyan-400 mt-2">FL Motor</div>
+                        <div class="text-xs md:text-sm font-bold text-cyan-400" id="speed-fl-value">0 km/h</div>
                     </div>
-                    <div class="text-xs md:text-sm font-bold text-cyan-400 mt-2">RL Motor</div>
-                    <div class="text-xs md:text-sm font-bold text-cyan-400" id="speed-rl-value">0 km/h</div>
+
+                    <!-- RL Motor -->
+                    <div class="flex-shrink-0 text-center">
+                        <div class="mini-gauge mx-auto">
+                            <div class="mini-circular-gauge" id="rpm-rl-gauge">
+                                <div class="mini-gauge-inner">
+                                    <div id="rpm-rl-value" class="text-lg font-bold text-green-400">0</div>
+                                    <div class="text-xs text-slate-400">RPM</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-xs md:text-sm font-bold text-cyan-400 mt-2">RL Motor</div>
+                        <div class="text-xs md:text-sm font-bold text-cyan-400" id="speed-rl-value">0 km/h</div>
+                    </div>
                 </div>
 
                 <!-- Brake -->
@@ -203,22 +258,39 @@
                         <div id="apps-value" class="text-lg font-mono text-green-300">0%</div>
                     </div>
                 </div>
-
-                <!-- RR Motor -->
-                <div class="flex-shrink-0 text-center order-5 lg:order-5">
-                    <div class="mini-gauge mx-auto">
-                        <div class="mini-circular-gauge" id="rpm-rr-gauge">
-                            <div class="mini-gauge-inner">
-                                <div id="rpm-rr-value" class="text-lg font-bold text-green-400">0</div>
-                                <div class="text-xs text-slate-400">RPM</div>
+                
+                <div class="flex flex-col gap-8 order-5 lg:order-5">
+                    <!-- FR Motor -->
+                    <div class="flex-shrink-0 text-center">
+                        <div class="mini-gauge mx-auto">
+                            <div class="mini-circular-gauge" id="rpm-fr-gauge">
+                                <div class="mini-gauge-inner">
+                                    <div id="rpm-fr-value" class="text-lg font-bold text-green-400">0</div>
+                                    <div class="text-xs text-slate-400">RPM</div>
+                                </div>
                             </div>
                         </div>
+                        <div class="text-xs md:text-sm font-bold text-cyan-400 mt-2">FR Motor</div>
+                        <div class="text-xs md:text-sm font-bold text-cyan-400" id="speed-fr-value">0 km/h</div>
                     </div>
-                    <div class="text-xs md:text-sm font-bold text-cyan-400 mt-2">RR Motor</div>
-                    <div class="text-xs md:text-sm font-bold text-cyan-400" id="speed-rr-value">0 km/h</div>
+
+                    <!-- RR Motor -->
+                    <div class="flex-shrink-0 text-center">
+                        <div class="mini-gauge mx-auto">
+                            <div class="mini-circular-gauge" id="rpm-rr-gauge">
+                                <div class="mini-gauge-inner">
+                                    <div id="rpm-rr-value" class="text-lg font-bold text-green-400">0</div>
+                                    <div class="text-xs text-slate-400">RPM</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-xs md:text-sm font-bold text-cyan-400 mt-2">RR Motor</div>
+                        <div class="text-xs md:text-sm font-bold text-cyan-400" id="speed-rr-value">0 km/h</div>
+                    </div>
                 </div>
             </div>
         </div>
+
         <!-- Charts Row -->
         <!-- Inverters Status -->
         <div class="glass-card rounded-lg p-6 mb-6">
@@ -237,8 +309,6 @@
                 </div>
             </div>
 
-            <!-- RPM Chart -->
-            
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <!-- FL Inverter -->
                 <div class="bg-slate-800 rounded-lg p-4">
@@ -271,8 +341,12 @@
                             <span class="inv-mcu-temp font-mono">N/A</span>
                         </div>
                         <div class="flex justify-between">
-                            <span class="text-slate-400">MOTOR T:</span>
+                            <span class="text-slate-400">Motor T:</span>
                             <span class="inv-motor-temp font-mono">N/A</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">Heartbeat:</span>
+                            <span class="inv-heartbeat font-mono">N/A</span>
                         </div>
                     </div>
                 </div>
@@ -308,8 +382,12 @@
                             <span class="inv-mcu-temp font-mono">N/A</span>
                         </div>
                         <div class="flex justify-between">
-                            <span class="text-slate-400">MOTOR T:</span>
+                            <span class="text-slate-400">Motor T:</span>
                             <span class="inv-motor-temp font-mono">N/A</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">Heartbeat:</span>
+                            <span class="inv-heartbeat font-mono">N/A</span>
                         </div>
                     </div>
                 </div>
@@ -344,8 +422,12 @@
                             <span class="inv-mcu-temp font-mono">N/A</span>
                         </div>
                         <div class="flex justify-between">
-                            <span class="text-slate-400">MOTOR T:</span>
+                            <span class="text-slate-400">Motor T:</span>
                             <span class="inv-motor-temp font-mono">N/A</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">Heartbeat:</span>
+                            <span class="inv-heartbeat font-mono">N/A</span>
                         </div>
                     </div>
                 </div>
@@ -381,8 +463,12 @@
                             <span class="inv-mcu-temp font-mono">N/A</span>
                         </div>
                         <div class="flex justify-between">
-                            <span class="text-slate-400">MOTO T:</span>
+                            <span class="text-slate-400">Motor T:</span>
                             <span class="inv-motor-temp font-mono">N/A</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">Heartbeat:</span>
+                            <span class="inv-heartbeat font-mono">N/A</span>
                         </div>
                     </div>
                 </div>
@@ -406,8 +492,6 @@
                 </div>
             </div>
         </div>
-
-        
 
         <!-- Footer -->
         <div class="glass-card rounded-lg p-4 text-center">

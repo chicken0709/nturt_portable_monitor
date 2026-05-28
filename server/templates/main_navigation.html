@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NTURT CAN Monitor - 主選單</title>
+    <title>NTURT CAN Monitor - Home</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/static/js/main_navigation.js" defer></script>
     <link rel="stylesheet" href="/static/css/main_navigation.css">
@@ -26,27 +26,15 @@
 
         <!-- Navigation Grid -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            <!-- Racing Dashboard -->
-            <a href="/racing" class="nav-card rounded-2xl p-8 block">
-                <div class="nav-icon bg-gradient-to-br from-blue-500 to-blue-600">
-                    🏎️
-                </div>
-                <h3 class="text-2xl font-bold text-white mb-2 text-center">賽車儀表板</h3>
-                <p class="text-slate-400 text-center text-sm">即時車輛數據顯示</p>
-                <div class="mt-4 text-center text-xs text-slate-500">
-                    GPS • 速度 • 扭力 • IMU
-                </div>
-            </a>
-
             <!-- Dynamic Dashboard -->
             <a href="/dashboard" class="nav-card rounded-2xl p-8 block">
                 <div class="nav-icon bg-gradient-to-br from-purple-500 to-purple-600">
-                    📊
+                    🏎️
                 </div>
-                <h3 class="text-2xl font-bold text-white mb-2 text-center">動態儀表板</h3>
-                <p class="text-slate-400 text-center text-sm">圖表與數據分析</p>
+                <h3 class="text-2xl font-bold text-white mb-2 text-center">Dynamic Dashboard</h3>
+                <p class="text-slate-400 text-center text-sm">Charts and Data Analysis</p>
                 <div class="mt-4 text-center text-xs text-slate-500">
-                    控制面板 • CSV 重播 • 數據分析
+                    Control Panel • CSV Playback • Data Analysis
                 </div>
             </a>
 
@@ -55,10 +43,10 @@
                 <div class="nav-icon bg-gradient-to-br from-yellow-500 to-yellow-600">
                     🔋
                 </div>
-                <h3 class="text-2xl font-bold text-white mb-2 text-center">電池管理系統</h3>
-                <p class="text-slate-400 text-center text-sm">蓄電池監控與分析</p>
+                <h3 class="text-2xl font-bold text-white mb-2 text-center">Battery Management</h3>
+                <p class="text-slate-400 text-center text-sm">Battery Monitoring and Analysis</p>
                 <div class="mt-4 text-center text-xs text-slate-500">
-                    電芯電壓 • 溫度 • SOC • 容量
+                    Cell Voltages • Temperatures • State of Charge • Capacity
                 </div>
             </a>
 
@@ -67,10 +55,10 @@
                 <div class="nav-icon bg-gradient-to-br from-red-500 to-red-600">
                     ⚡
                 </div>
-                <h3 class="text-2xl font-bold text-white mb-2 text-center">扭力監控</h3>
-                <p class="text-slate-400 text-center text-sm">馬達扭力與轉速</p>
+                <h3 class="text-2xl font-bold text-white mb-2 text-center">Torque Monitor</h3>
+                <p class="text-slate-400 text-center text-sm">Motor Torque and RPM</p>
                 <div class="mt-4 text-center text-xs text-slate-500">
-                    四輪馬達 • 扭力曲線 • 溫度
+                    Four-Wheel Motors • Torque Curves • Temperature
                 </div>
             </a>
 
@@ -79,10 +67,10 @@
                 <div class="nav-icon bg-gradient-to-br from-green-500 to-green-600">
                     🎯
                 </div>
-                <h3 class="text-2xl font-bold text-white mb-2 text-center">IMU 監控</h3>
-                <p class="text-slate-400 text-center text-sm">慣性測量單元數據</p>
+                <h3 class="text-2xl font-bold text-white mb-2 text-center">IMU Monitor</h3>
+                <p class="text-slate-400 text-center text-sm">Inertial Measurement Unit Data</p>
                 <div class="mt-4 text-center text-xs text-slate-500">
-                    加速度 • 陀螺儀 • 四元數 • 3D 姿態
+                    Acceleration • Gyroscope • Quaternions • 3D Orientation
                 </div>
             </a>
 
@@ -91,10 +79,10 @@
                 <div class="nav-icon bg-gradient-to-br from-cyan-500 to-cyan-600">
                     🛰️
                 </div>
-                <h3 class="text-2xl font-bold text-white mb-2 text-center">Xsens IMU</h3>
-                <p class="text-slate-400 text-center text-sm">高精度慣性測量</p>
+                <h3 class="text-2xl font-bold text-white mb-2 text-center">GPS Monitor</h3>
+                <p class="text-slate-400 text-center text-sm">High-Precision GPS Data</p>
                 <div class="mt-4 text-center text-xs text-slate-500">
-                    GPS • 磁場 • 速度 • Delta-V
+                    GPS • Magnetic Field • Speed • Delta-V
                 </div>
             </a>
 
@@ -103,10 +91,10 @@
                 <div class="nav-icon bg-gradient-to-br from-orange-500 to-orange-600">
                     📁
                 </div>
-                <h3 class="text-2xl font-bold text-white mb-2 text-center">CSV 控制面板</h3>
-                <p class="text-slate-400 text-center text-sm">CSV 檔案回放控制</p>
+                <h3 class="text-2xl font-bold text-white mb-2 text-center">CSV Control Panel</h3>
+                <p class="text-slate-400 text-center text-sm">CSV File Playback Control</p>
                 <div class="mt-4 text-center text-xs text-slate-500">
-                    檔案選擇 • 播放控制 • 進度跳轉
+                    File Selection • Playback Control • Progress Jump
                 </div>
             </a>
         </div>

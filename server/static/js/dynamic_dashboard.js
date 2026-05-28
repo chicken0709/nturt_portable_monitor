@@ -14,8 +14,6 @@ class NTURTDashboard {
         
         // Chart instances
         this.torqueChart = null;
-        this.rpmChart = null;
-        this.motorTempChart = null;
         this.cellVoltageChart = null;
         this.cellTempChart = null;     
         
@@ -294,6 +292,12 @@ class NTURTDashboard {
             if (brakeFill) brakeFill.style.height = `${brakePercent}%`;
             if (brakeValue) brakeValue.textContent = `${brakePercent}%`;
         }
+
+        // Update APPS 1/2 and BSE 1/2 values
+        document.getElementById('vcu-apps1').textContent = formatValue(vcu.apps1, '', 0);
+        document.getElementById('vcu-apps2').textContent = formatValue(vcu.apps2, '', 0);
+        document.getElementById('vcu-bse1').textContent = formatValue(vcu.bse1, '', 0);
+        document.getElementById('vcu-bse2').textContent = formatValue(vcu.bse2, '', 0);
     }
 
     updateTripDistance(distance) {
@@ -432,6 +436,7 @@ class NTURTDashboard {
                 this.updateInverterField(card, '.inv-mos-temp', data.mos_temp !== null ? `${data.mos_temp.toFixed(1)}°C` : 'N/A');
                 this.updateInverterField(card, '.inv-motor-temp', data.motor_temp !== null ? `${data.motor_temp.toFixed(1)}°C` : 'N/A');
                 this.updateInverterField(card, '.inv-mcu-temp', data.mcu_temp !== null ? `${data.mcu_temp.toFixed(1)}°C` : 'N/A');
+                this.updateInverterField(card, '.inv-heartbeat', data.heartbeat !== null ? (data.heartbeat ? 'OK' : 'Fail') : 'N/A');
             }
         });
     }
@@ -516,34 +521,66 @@ class NTURTDashboard {
                     labels: [],
                     datasets: [
                         {
-                            label: 'RL Motor',
+                            label: 'FL Motor',
                             data: [],
                             borderColor: '#3b82f6',
-                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                            tension: 0.4,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'FR Motor',
+                            data: [],
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                            tension: 0.4,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'FL Motor(FB)',
+                            data: [],
+                            borderColor: '#24acf6',
+                            backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                            tension: 0.4,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'FR Motor(FB)',
+                            data: [],
+                            borderColor: '#095b10',
+                            backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                            tension: 0.4,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'RL Motor',
+                            data: [],
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(0, 0, 0, 0.1)',
                             tension: 0.4,
                             pointRadius: 0
                         },
                         {
                             label: 'RR Motor',
                             data: [],
-                            borderColor: '#10b981',
-                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            borderColor: '#ef4444',
+                            backgroundColor: 'rgba(0, 0, 0, 0.1)',
                             tension: 0.4,
                             pointRadius: 0
                         },
                         {
                             label: 'RL Motor(FB)',
                             data: [],
-                            borderColor: '#f59e0b',
-                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                            borderColor: '#d0c63f',
+                            backgroundColor: 'rgba(0, 0, 0, 0.1)',
                             tension: 0.4,
                             pointRadius: 0
                         },
                         {
                             label: 'RR Motor(FB)',
                             data: [],
-                            borderColor: '#ef4444',
-                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            borderColor: '#a80000',
+                            backgroundColor: 'rgba(0, 0, 0, 0.1)',
                             tension: 0.4,
                             pointRadius: 0
                         }
@@ -628,159 +665,6 @@ class NTURTDashboard {
         };
 
         Chart.register(errorBackgroundPlugin);
-
-        // Initialize RPM Chart
-        const rpmCtx = document.getElementById('rpm-chart');
-        if (rpmCtx) {
-            this.rpmChart = new Chart(rpmCtx, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [
-                        {
-                            label: 'FL Motor',
-                            data: [],
-                            borderColor: '#3b82f6',
-                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                            tension: 0.4,
-                            pointRadius: 0,
-                            borderWidth: 1
-                        },
-                        {
-                            label: 'FR Motor',
-                            data: [],
-                            borderColor: '#10b981',
-                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                            tension: 0.4,
-                            pointRadius: 0,
-                            borderWidth: 1
-                        },
-                        {
-                            label: 'RL Motor',
-                            data: [],
-                            borderColor: '#f59e0b',
-                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                            tension: 0.4,
-                            pointRadius: 0,
-                            borderWidth: 2
-  
-                        },
-                        {
-                            label: 'RR Motor',
-                            data: [],
-                            borderColor: '#ef4444',
-                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                            tension: 0.4,
-                            pointRadius: 0,
-                            borderWidth: 1
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            labels: { color: '#e2e8f0' }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            ticks: { color: '#94a3b8' },
-                            grid: { color: 'rgba(148, 163, 184, 0.1)' }
-                        },
-                        y: {
-                            min: 0,
-                            max: 8000,
-                            ticks: { color: '#94a3b8' },
-                            grid: { color: 'rgba(148, 163, 184, 0.1)' },
-                            title: {
-                                display: true,
-                                text: 'RPM',
-                                color: '#e2e8f0'
-                            }
-                        }
-                    },
-                    animation: { duration: 0 }
-                }
-            });
-        }
-
-        // Initialize Motor Temperature Chart
-        const motorTempCtx = document.getElementById('motor-temp-chart');
-        if (motorTempCtx) {
-            this.motorTempChart = new Chart(motorTempCtx, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [
-                        {
-                            label: 'FL Motor',
-                            data: [],
-                            borderColor: '#a78bfa',
-                            backgroundColor: 'rgba(167, 139, 250, 0.1)',
-                            tension: 0.4,
-                            pointRadius: 0,
-                            borderWidth: 2
-                        },
-                        {
-                            label: 'FR Motor',
-                            data: [],
-                            borderColor: '#60a5fa',
-                            backgroundColor: 'rgba(96, 165, 250, 0.1)',
-                            tension: 0.4,
-                            pointRadius: 0,
-                            borderWidth: 2
-                        },
-                        {
-                            label: 'RL Motor',
-                            data: [],
-                            borderColor: '#34d399',
-                            backgroundColor: 'rgba(52, 211, 153, 0.1)',
-                            tension: 0.4,
-                            pointRadius: 0,
-                            borderWidth: 2
-                        },
-                        {
-                            label: 'RR Motor',
-                            data: [],
-                            borderColor: '#fbbf24',
-                            backgroundColor: 'rgba(251, 191, 36, 0.1)',
-                            tension: 0.4,
-                            pointRadius: 0,
-                            borderWidth: 2
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            labels: { color: '#e2e8f0' }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            ticks: { color: '#94a3b8' },
-                            grid: { color: 'rgba(148, 163, 184, 0.1)' }
-                        },
-                        y: {
-                            min: 0,
-                            max: 100,
-                            ticks: { color: '#94a3b8' },
-                            grid: { color: 'rgba(148, 163, 184, 0.1)' },
-                            title: {
-                                display: true,
-                                text: 'Temperature (°C)',
-                                color: '#e2e8f0'
-                            }
-                        }
-                    },
-                    animation: { duration: 0 }
-                }
-            });
-        }
 
         // Initialize Cell Voltage Chart
         const cellVoltageCtx = document.getElementById('cell-voltage-chart');
@@ -871,6 +755,10 @@ class NTURTDashboard {
         // Update Torque Chart
         if (this.torqueChart && data.inverters) {
             const torqueData = [
+                data.inverters[1]?.target_torque || 0,
+                data.inverters[2]?.target_torque || 0,
+                data.inverters[1]?.torque || 0,
+                data.inverters[2]?.torque || 0,
                 data.inverters[3]?.target_torque || 0,
                 data.inverters[4]?.target_torque || 0,
                 data.inverters[3]?.torque || 0,
@@ -896,58 +784,6 @@ class NTURTDashboard {
             }
             
             this.torqueChart.update('none');
-        }
-        
-        // Update RPM Chart
-        if (this.rpmChart && data.inverters) {
-            const rpmData = [
-                Math.abs(data.inverters[1]?.speed || 0),
-                Math.abs(data.inverters[2]?.speed || 0),
-                Math.abs(data.inverters[3]?.speed || 0),
-                Math.abs(data.inverters[4]?.speed || 0)
-            ];
-            
-            // Add new data point
-            this.rpmChart.data.labels.push(currentTime);
-            this.rpmChart.data.datasets.forEach((dataset, index) => {
-                dataset.data.push(rpmData[index]);
-            });
-            
-            // Limit data points
-            if (this.rpmChart.data.labels.length > this.maxHistoryPoints) {
-                this.rpmChart.data.labels.shift();
-                this.rpmChart.data.datasets.forEach(dataset => {
-                    dataset.data.shift();
-                });
-            }
-            
-            this.rpmChart.update('none');
-        }
-
-        // Update Motor Temperature Chart
-        if (this.motorTempChart && data.inverters) {
-            const motorTempData = [
-                data.inverters[1]?.motor_temp || 0,
-                data.inverters[2]?.motor_temp || 0,
-                data.inverters[3]?.motor_temp || 0,
-                data.inverters[4]?.motor_temp || 0
-            ];
-            
-            // Add new data point
-            this.motorTempChart.data.labels.push(currentTime);
-            this.motorTempChart.data.datasets.forEach((dataset, index) => {
-                dataset.data.push(motorTempData[index]);
-            });
-            
-            // Limit data points
-            if (this.motorTempChart.data.labels.length > this.maxHistoryPoints) {
-                this.motorTempChart.data.labels.shift();
-                this.motorTempChart.data.datasets.forEach(dataset => {
-                    dataset.data.shift();
-                });
-            }
-            
-            this.motorTempChart.update('none');
         }
 
         // Update Cell Voltage Chart
@@ -1094,9 +930,6 @@ class NTURTDashboard {
         if (this.torqueChart) {
             this.torqueChart.destroy();
         }
-        if (this.rpmChart) {
-            this.rpmChart.destroy();
-        }
         if (this.cellVoltageChart) {
             this.cellVoltageChart.destroy();
         }
@@ -1226,4 +1059,14 @@ document.addEventListener('DOMContentLoaded', () => {
 // Export for potential external use
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = NTURTDashboard;
+}
+
+function formatValue(value, suffix = '', decimals = 2) {
+    if (value === null || value === undefined) {
+        return 'N/A';
+    }
+    if (typeof value === 'number') {
+        return value.toFixed(decimals) + suffix;
+    }
+    return value.toString() + suffix;
 }
