@@ -1,105 +1,220 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <title>CSV Replay Control</title>
+    <link class="w-5 h-5" rel="icon" href="/static/images/logo.png" type="image/png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="/static/js/csv_control.js" defer></script>
-    <!-- <script src="https://cdn.tailwindcss.com"></script> -->
     <link rel="stylesheet" href="/static/css/csv_control.css">
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-    <!-- Home Button -->
-    <a href="/" class="home-button" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
-        <svg style="width: 20px; height: 20px; margin-right: 8px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
-        </svg>
-        <span>Home</span>
-    </a>
+<body class="no-scrollbar">
 
-    <div class="container">
-        <h1>🎮 CSV Replay Control Panel</h1>
-        
-        <div class="section">
-            <h2>📡 Connection Status</h2>
-            <div id="wsStatus" class="status-box status-disconnected">
-                ⚠️ WebSocket: Disconnected
-            </div>
-            <div id="serverStatus" class="status-box">
-                🖥️ Server Status: Unknown
-            </div>
-            <div id="modeStatus" class="status-box status-realtime">
-                🔴 Mode: Realtime <span class="mode-badge mode-realtime">LIVE</span>
+    <!-- Header -->
+    <header class="max-w-[1400px] mx-auto flex justify-between items-center border-b border-zinc-800 pb-6 mb-8">
+        <div>
+            <div class="flex items-center gap-3">
+                <h1 class="text-2xl font-bold uppercase tracking-wider text-white">CSV Replay<span class="text-sky-400"> Control Panel</span></h1>
             </div>
         </div>
+        <a href="/" class="btn-nav text-xs uppercase tracking-wider">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+            </svg>
+            Home
+        </a>
+    </header>
 
-        <div class="section">
-            <h2>🎬 Playback Controls</h2>
-            <div class="control-buttons">
-                <button onclick="togglePause()" id="pauseBtn" disabled>⏸️ Pause</button>
-                <button class="btn-success" onclick="switchToRealtime()">🔴 Switch to Realtime</button>
-                <button class="btn-warning" onclick="testConnection()">🔌 Test Connection</button>
-                <button onclick="requestCSVList()">🔄 Refresh CSV List</button>
-                <button onclick="clearLog()">🗑️ Clear Log</button>
-            </div>
-        </div>
+    <div class="max-w-[1400px] mx-auto flex flex-col gap-6">
 
-        <!-- Timeline Control -->
-        <div class="section" id="timelineSection" style="display: none;">
-            <h2>⏱️ Timeline Control</h2>
+        <section class="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 items-stretch">
             
-            <div class="timeline-container">
-                <div class="timeline-time">
-                    <span>⏰ <span id="currentTime">00:00</span></span>
-                    <span>📊 <span id="progressPercent">0.0%</span></span>
-                    <span>⏳ <span id="totalTime">00:00</span></span>
+            <div class="panel flex flex-col justify-between">
+                <div class="panel-header text-[16px]">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"></path>
+                    </svg>
+                    Status
                 </div>
-                
+                <div class="flex flex-col flex-1 justify-between h-full">
+                    <div class="flex items-center justify-between p-2.5 rounded-lg bg-zinc-950 border border-zinc-800">
+                        <span class="text-[12px] font-medium text-zinc-400">WebSocket</span>
+                        <span id="wsStatus" class="text-xs font-mono text-red-500">Disconnected</span>
+                    </div>
+
+                    <div id="serverStatus" class="group flex flex-col gap-2 p-2.5 rounded-lg bg-zinc-950 border border-zinc-800 transition-all">
+                        <span class="text-[11px] uppercase tracking-wider text-zinc-500 font-bold">Clients</span>
+                        <div class="flex gap-2">
+                            <div class="flex-1 flex items-center justify-between bg-zinc-900 p-1.5 px-2 rounded border border-zinc-800/50">
+                                <span class="text-[11px] text-zinc-400">Vehicle</span>
+                                <span id="vehicle-client-count" class="text-[12px] font-mono font-bold text-zinc-200">0</span>
+                            </div>
+                            <div class="flex-1 flex items-center justify-between bg-zinc-900 p-1.5 px-2 rounded border border-zinc-800/50">
+                                <span class="text-[11px] text-zinc-400">Web</span>
+                                <span id="web-client-count" class="text-[12px] font-mono font-bold text-zinc-200">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between p-2.5 rounded-lg bg-zinc-950 border border-zinc-800">
+                        <span class="text-[12px] font-medium text-zinc-400">Mode</span>
+                        <span id="modeStatus" class="text-xs font-mono text-amber-400">Realtime</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel" id="timelineSection">
+                <div class="flex justify-between">
+                    <div class="panel-header text-[16px]">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        Timeline
+                    </div>
+                    <div id="selectedFileName" class="text-sm font-mono text-zinc-400">NONE</div>
+                </div>
+                <div class="grid grid-cols-3 text-center bg-zinc-950 p-3 border border-zinc-800 rounded-lg mb-4">
+                    <div>
+                        <div class="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Elapsed</div>
+                        <div id="currentTime" class="text-xl font-mono font-bold text-white mt-1">00:00</div>
+                    </div>
+                    <div>
+                        <div class="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Progress</div>
+                        <div id="progressPercent" class="text-xl font-mono font-bold text-sky-400 mt-1">0.0%</div>
+                    </div>
+                    <div>
+                        <div class="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Duration</div>
+                        <div id="totalTime" class="text-xl font-mono font-bold text-zinc-400 mt-1">00:00</div>
+                    </div>
+                </div>
                 <div class="timeline-slider" id="timelineSlider">
-                    <div class="timeline-progress" id="timelineProgress"></div>
-                    <div class="timeline-thumb" id="timelineThumb"></div>
+                    <div class="timeline-progress" id="timelineProgress" style="width: 0%"></div>
+                    <div class="timeline-thumb" id="timelineThumb" style="left: 0%"></div>
                 </div>
-                
-                <div class="control-group">
-                    <label>⚡ Speed:</label>
-                    <button class="speed-btn" onclick="setSpeed(0.25)">0.25x</button>
-                    <button class="speed-btn" onclick="setSpeed(0.5)">0.5x</button>
-                    <button class="speed-btn active" onclick="setSpeed(1)" id="speed1x">1x</button>
-                    <button class="speed-btn" onclick="setSpeed(2)">2x</button>
-                    <button class="speed-btn" onclick="setSpeed(5)">5x</button>
-                    <button class="speed-btn" onclick="setSpeed(10)">10x</button>
-                </div>
-                
-                <div class="control-group">
-                    <label>⏩ Jump:</label>
-                    <button onclick="jumpTime(-60)">⏪ -60s</button>
-                    <button onclick="jumpTime(-30)">⏪ -30s</button>
-                    <button onclick="jumpTime(-10)">◀️ -10s</button>
-                    <button onclick="jumpTime(-5)">◀ -5s</button>
-                    <button onclick="jumpTime(5)">▶ +5s</button>
-                    <button onclick="jumpTime(10)">▶️ +10s</button>
-                    <button onclick="jumpTime(30)">⏩ +30s</button>
-                    <button onclick="jumpTime(60)">⏩ +60s</button>
-                </div>
-            </div>
-        </div>
+                <div class="flex flex-wrap lg:flex-nowrap items-center justify-between gap-4 mt-2 w-full">
+    
+                    <div class="w-full lg:flex-1 flex items-center bg-zinc-950 p-2 border border-zinc-800 rounded-lg">
+                        <span class="text-[12px] text-zinc-500 mr-4 font-bold">SPEED</span>
+                        <div class="flex justify-between flex-1 gap-1">
+                            <button class="speed-btn px-2 py-1 text-xs flex-1" onclick="setSpeed(0.25)">0.25x</button>
+                            <button class="speed-btn px-2 py-1 text-xs flex-1" onclick="setSpeed(0.5)">0.5x</button>
+                            <button class="speed-btn active px-2 py-1 text-xs flex-1" onclick="setSpeed(1)">1.0x</button>
+                            <button class="speed-btn px-2 py-1 text-xs flex-1" onclick="setSpeed(2)">2.0x</button>
+                            <button class="speed-btn px-2 py-1 text-xs flex-1" onclick="setSpeed(5)">5.0x</button>
+                        </div>
+                    </div>
 
-        <div class="section">
-            <h2>📁 CSV Files</h2>
-            <div class="selected-file-box">
-                <strong>Selected File:</strong> <span id="selectedFileName" style="color: #667eea;">None</span>
-            </div>
-            <div id="fileList">
-                <p style="color: #718096; text-align: center; padding: 20px;">
-                    Click "Refresh CSV List" to load available files from the vehicle...
-                </p>
-            </div>
-        </div>
+                    <button onclick="togglePause()" id="pauseBtn" 
+                            class="w-full lg:flex-1 py-2 btn-primary flex items-center justify-center gap-2 rounded-lg">
+                        <span class="font-bold">Pause</span>
+                    </button>
 
-        <div class="section">
-            <h2>🐛 Debug Log</h2>
-            <div id="log" class="log"></div>
-        </div>
+                    <div class="w-full lg:flex-1 flex items-center bg-zinc-950 p-2 border border-zinc-800 rounded-lg">
+                        <span class="text-[12px] text-zinc-500 mr-4 font-bold">JUMP</span>
+                        <div class="flex justify-between flex-1 gap-1">
+                            <button class="jump-btn px-2 py-1 text-xs flex-1" onclick="jumpTime(-30)">-30s</button>
+                            <button class="jump-btn px-2 py-1 text-xs flex-1" onclick="jumpTime(-10)">-10s</button>
+                            <button class="jump-btn px-2 py-1 text-xs flex-1" onclick="jumpTime(-5)">-5s</button>
+                            <button class="jump-btn px-2 py-1 text-xs flex-1" onclick="jumpTime(5)">+5s</button>
+                            <button class="jump-btn px-2 py-1 text-xs flex-1" onclick="jumpTime(10)">+10s</button>
+                            <button class="jump-btn px-2 py-1 text-xs flex-1" onclick="jumpTime(30)">+30s</button>
+                        </div>
+                    </div>
+                    
+                </div>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-1 lg:grid-cols-[320px_1fr_1fr] gap-4 items-start">
+    
+            <div class="panel flex flex-col justify-between h-full">
+                <div class="panel-header text-[16px]">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-zinc-500 mr-2">
+                        <line x1="4" y1="21" x2="4" y2="14" />
+                        <line x1="4" y1="10" x2="4" y2="3" />
+                        <line x1="12" y1="21" x2="12" y2="12" />
+                        <line x1="12" y1="8" x2="12" y2="3" />
+                        <line x1="20" y1="21" x2="20" y2="16" />
+                        <line x1="20" y1="12" x2="20" y2="3" />
+                        <line x1="2" y1="14" x2="6" y2="14" />
+                        <line x1="10" y1="8" x2="14" y2="8" />
+                        <line x1="18" y1="16" x2="22" y2="16" />
+                    </svg>
+                    Controls
+                </div>
+                <div class="flex flex-col gap-2">
+                    <button onclick="switchToRealtime()" 
+                        class="group flex items-center justify-start p-2 rounded-lg transition-all bg-zinc-900/50 border-2 border-zinc-800 hover:border-red-500/40 hover:bg-zinc-800/80 text-left w-full">
+                        
+                        <div class="w-10 flex justify-center items-center shrink-0">
+                            <div class="w-8 h-8 rounded-md bg-zinc-800 flex items-center justify-center text-zinc-500 group-hover:text-red-500 transition-colors">
+                                <div class="relative flex h-2.5 w-2.5">
+                                    <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-zinc-500 group-hover:bg-red-500"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <h3 class="text-sm font-bold text-zinc-300 group-hover:text-white transition-colors ml-2">Switch to Realtime</h3>
+                    </button>
+
+                    <button onclick="requestCSVList()" 
+                        class="group flex items-center justify-start p-2 rounded-lg transition-all bg-zinc-900/50 border-2 border-zinc-800 hover:border-sky-500/40 hover:bg-zinc-800/80 text-left w-full">
+                        <div class="w-10 flex justify-center items-center shrink-0">
+                            <div class="w-8 h-8 rounded-md bg-zinc-800 flex items-center justify-center text-zinc-500 group-hover:text-sky-400 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                    <path d="M3 3v5h5" />
+                                    <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                                    <path d="M16 16h5v5" />
+                                </svg>
+                            </div>
+                        </div>
+                        <h3 class="text-sm font-bold text-zinc-300 group-hover:text-white transition-colors ml-2">Refresh CSV List</h3>
+                    </button>
+
+                    <button onclick="testConnection()" 
+                        class="group flex items-center justify-start p-2 rounded-lg transition-all bg-zinc-900/50 border-2 border-zinc-800 hover:border-emerald-500/40 hover:bg-zinc-800/80 text-left w-full">
+                        <div class="w-10 flex justify-center items-center shrink-0">
+                            <div class="w-8 h-8 rounded-md bg-zinc-800 flex items-center justify-center text-zinc-500 group-hover:text-emerald-400 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M5 12.55a11 11 0 0 1 14.08 0" /><path d="M1.42 9a16 16 0 0 1 21.16 0" /><path d="M8.59 16.11a6 6 0 0 1 6.82 0" /><line x1="12" y1="20" x2="12.01" y2="20" />
+                                </svg>
+                            </div>
+                        </div>
+                        <h3 class="text-sm font-bold text-zinc-300 group-hover:text-white transition-colors ml-2">Test Connection</h3>
+                    </button>
+                </div>
+            </div>
+
+            <div class="panel flex flex-col">
+                <div class="panel-header justify-between text-[16px]">
+                    <span class="flex items-center gap-2 font-bold uppercase">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
+                        CSV Files
+                    </span>
+                </div>
+                <div id="fileList" class="bg-zinc-950 border border-zinc-800 rounded-lg p-2 h-[178px] overflow-y-auto">
+                </div>
+            </div>
+
+            <div class="panel flex flex-col">
+                <div class="panel-header justify-between text-[16px]">
+                    <span class="flex items-center gap-2 font-bold uppercase">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                        </svg>
+                        Debug Log
+                    </span>
+                    <button onclick="clearLog()" 
+                        class="flex items-center justify-center border-2 border-zinc-700 text-zinc-500 hover:text-red-400 hover:border-red-900/50 transition-all duration-200 rounded-md">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                    </button>
+                </div>
+                <div id="log" class="log-terminal h-[178px] overflow-y-auto font-mono text-[12px] bg-black/50 rounded-lg border border-zinc-800">
+                    </div>
+            </div>
+        </section>
+
     </div>
 </body>
 </html>

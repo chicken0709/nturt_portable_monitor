@@ -1,4 +1,4 @@
-// WebSocket 連接
+// WebSocket connection
 const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
 const wsUrl = `${protocol}://${window.location.host}/ws`;
 let ws = new WebSocket(wsUrl);
@@ -6,15 +6,22 @@ let ws = new WebSocket(wsUrl);
 ws.onopen = () => {
     document.getElementById('connection-indicator').className = 'w-3 h-3 rounded-full bg-green-500 status-indicator';
     document.getElementById('connection-text').textContent = 'System Running';
-    document.getElementById('server-status').textContent = 'Running';
+    const serverStatusElement = document.getElementById('server-status');
+    serverStatusElement.textContent = 'Running';
+    serverStatusElement.classList.remove('text-red-500');
+    serverStatusElement.classList.add('text-emerald-500');
 };
 
 ws.onclose = () => {
     document.getElementById('connection-indicator').className = 'w-3 h-3 rounded-full bg-red-500';
     document.getElementById('connection-text').textContent = 'Connection Lost';
-    document.getElementById('server-status').textContent = 'Offline';
-    
-    // 重新連接
+
+    const serverStatusElement = document.getElementById('server-status');
+    serverStatusElement.textContent = 'Offline';
+    serverStatusElement.classList.remove('text-emerald-500');
+    serverStatusElement.classList.add('text-red-500');
+
+    // reconnect
     setTimeout(() => {
         ws = new WebSocket(wsUrl);
     }, 3000);
@@ -34,7 +41,7 @@ ws.onmessage = (event) => {
     }
 };
 
-// 定期獲取狀態
+// fetch and update status
 async function updateStatus() {
     try {
         const response = await fetch('/api/status');
