@@ -10,7 +10,7 @@ import logging
 import cantools
 from datetime import datetime
 
-DBC_FILE = "dbc/NTUR_EP6_260406.dbc"
+DBC_FILE = "dbc/NTUR_EP6_260617.dbc"
 
 # CAN ID : (subsystem, handler_function_name, param_type)
 # param_type: "raw" (data), "decoded" (decoded), "both" (data + decoded)
@@ -389,7 +389,7 @@ class CANDecoder:
         feedback_torque = feedback_torque_raw / 100.0 * 20 * 4
         speed = speed_raw
 
-        if inv_num == 3:
+        if inv_num == 2 or inv_num == 3:
             feedback_torque *= -1
         
         self.data_store['inverters'][inv_num]['status'] = (status_word1, status_word2) 
@@ -416,7 +416,7 @@ class CANDecoder:
             target_torque_raw = struct.unpack('<h', data[2:4])[0]
             target_torque = target_torque_raw / 1000.0 * 20
 
-            if inv_num == 3:
+            if inv_num == 2 or inv_num == 3:
                 target_torque *= -1
 
             self.data_store['inverters'][inv_num]['control_word'] = control_word
