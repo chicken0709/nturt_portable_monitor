@@ -588,7 +588,7 @@ function updateDisplay(data) {
             if (allTemps.length > 0) {
                 const avgTemp = validTemps.length > 0 ? validTemps.reduce((a, b) => a + b, 0) / validTemps.length : 0;
                 const maxTemp = Math.max(...allTemps);
-                const minTemp = Math.min(...allTemps);
+                const minTemp = Math.min(...validTemps);
 
                 // Update segment overview
                 const overviewAvgEl = document.getElementById(`overview-seg${segIdx}-t-avg`);
