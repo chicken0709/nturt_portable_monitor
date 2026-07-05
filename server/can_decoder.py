@@ -71,7 +71,12 @@ CAN_MESSAGE_CONFIG = {
     0x288: ("imu2", "decode_imu2_gyro", "decoded"),
     0x488: ("imu2", "decode_imu2_quaternion", "decoded"),
     # can logging
-    0x421: ("logging", "decode_logging_status", "raw")
+    0x421: ("logging", "decode_logging_status", "raw"),
+    # tire temperature
+    0x691: ("tire_temp", "decode_tire_temp", "raw"),
+    0x692: ("tire_temp", "decode_tire_temp", "raw"),
+    0x693: ("tire_temp", "decode_tire_temp", "raw"),
+    0x694: ("tire_temp", "decode_tire_temp", "raw")
 }
 
 # VCU status bit flags
@@ -173,6 +178,12 @@ class CANDecoder:
                 'status': None,
                 'start_time': None,
                 'last_update': None
+            },
+            'tire_temp': {
+                1: {'name': 'FL', 'cell_index': None, 'cell_temperatures': None, 'last_update': None},
+                2: {'name': 'FR', 'cell_index': None, 'cell_temperatures': None, 'last_update': None},
+                3: {'name': 'RL', 'cell_index': None, 'cell_temperatures': None, 'last_update': None},
+                4: {'name': 'RR', 'cell_index': None, 'cell_temperatures': None, 'last_update': None}
             }
         }
 
@@ -197,7 +208,8 @@ class CANDecoder:
             'vehicle_clients': len(vehicle_clients),
             'vehicle_connected': vehicle_connected,
             'last_data_time': last_data_time,
-            'logging': self.data_store['logging']
+            'logging': self.data_store['logging'],
+            'tire_temp': self.data_store['tire_temp']
         }
         
     def decode_can_message(self, msg):
@@ -222,14 +234,14 @@ class CANDecoder:
 
         try: 
             # decode messages based on subsystem and param_type
-            if subsystem == "inverters":
-                inv_num = can_id & 0xF
+            if subsystem == "inverters" or subsystem == "tire_temp":
+                idx = can_id & 0xF
                 if param_type == "raw":
-                    handler(data, inv_num)
+                    handler(data, idx)
                 elif param_type == "decoded":
-                    handler(decoded, inv_num)
+                    handler(decoded, idx)
                 elif param_type == "both":
-                    handler(data, decoded, inv_num)
+                    handler(data, decoded, idx)
             else:
                 if param_type == "raw":
                     handler(data)
@@ -241,11 +253,11 @@ class CANDecoder:
             # update last_update time
             if subsystem is None:
                 return
-            if subsystem != 'inverters':
-                self.data_store[subsystem]['last_update'] = time.time()
+            if subsystem == 'inverters' or subsystem == 'tire_temp':
+                idx = can_id & 0xF
+                self.data_store[subsystem][idx]['last_update'] = time.time()
             else:
-                inv_num = can_id & 0xF    
-                self.data_store['inverters'][inv_num]['last_update'] = time.time()
+                self.data_store[subsystem]['last_update'] = time.time()
         
         except Exception as e:
             print(f"Failed to decode CAN message ID 0x{can_id:03X}: {e}")
@@ -470,3 +482,11 @@ class CANDecoder:
             
             self.data_store['logging']['status'] = status
             self.data_store['logging']['start_time'] = start_time
+
+    def decode_tire_temp(self, data, idx):
+        if len(data) >= 8:
+            cell_index = data[0]
+            temperatures = [data[i] for i in range(1, min(8, len(data)))]
+
+            self.data_store['tire_temp'][idx]['cell_index'] = cell_index
+            self.data_store['tire_temp'][idx]['cell_temperatures'] = temperatures

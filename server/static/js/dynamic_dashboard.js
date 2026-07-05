@@ -20,6 +20,7 @@ class NTURTDashboard {
         // Initialize components
         this.initWebSocket();
         this.initCharts();
+        this.initializeTireTempHeatmap();
         this.startHeartbeatCheck();
 
         console.log('NTURT Dashboard initialized - Version 2026-01-30 with vehicle connection detection');
@@ -164,6 +165,9 @@ class NTURTDashboard {
 
             // Update CAN logging status
             this.updateCANLoggingStatus(data.logging);
+
+            // Update tire temp heatmaps
+            this.updateTireTempHeatmaps(data.tire_temp);
         } catch (error) {
             console.error('Error updating dashboard:', error);
         }
@@ -801,6 +805,95 @@ class NTURTDashboard {
         }
     }
 
+    initializeTireTempHeatmap() {
+        const tireTempIds = ['tire-temp-fl', 'tire-temp-fr', 'tire-temp-rl', 'tire-temp-rr'];
+
+        const width = 24;
+        const height = 32;
+       
+        tireTempIds.forEach(id => {
+            const element = document.getElementById(id);
+            if (!element) return;
+
+            const ctx = element.getContext('2d');
+            const imageData = ctx.createImageData(width, height);
+            const data = imageData.data;
+
+            // generate a 2D matrix data
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    // initialize to 0
+                    const rgb = getProgressiveColor(0);
+
+                    // find the index in the flat 1D canvas array
+                    const i = (y * width + x) * 4;
+
+                    // Assign the data elements
+                    data[i]     = rgb[0]; // R
+                    data[i + 1] = rgb[1]; // G
+                    data[i + 2] = rgb[2]; // B
+                    data[i + 3] = 255;    // A
+                }
+            }
+
+            // write the matrix pixel data back to the canvas context
+            ctx.putImageData(imageData, 0, 0);
+        });
+    }
+
+    updateTireTempHeatmaps(tireTemps) {
+        if (!tireTemps) return;
+
+        const width = 24;
+        const height = 32;
+
+        const mapping = [
+            { key: 1, id: 'tire-temp-fl' },
+            { key: 2, id: 'tire-temp-fr' },
+            { key: 3, id: 'tire-temp-rl' },
+            { key: 4, id: 'tire-temp-rr' }
+        ];
+
+        mapping.forEach(({ key, id }) => {
+            const element = document.getElementById(id);
+            if (!element) return;
+
+            const ctx = element.getContext('2d');
+            const tireTempData = tireTemps[key];
+
+            if (!tireTempData || !tireTempData.cell_index || !tireTempData.cell_temperatures) {
+                console.log(`Invalid temperature data for tire ${key}`);
+                return;
+            }
+
+            const startIdx = tireTempData.cell_index;
+            const temps = tireTempData.cell_temperatures;
+
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const data = imageData.data;
+
+            // update the 7 cells
+            for (let i = 0; i < temps.length; i++) {
+                const index = startIdx + i;
+
+                // safety check
+                if (index < 0 || index >= width * height) continue;
+
+                const temp = temps[i];
+                const [r, g, b] = getProgressiveColor(temp);
+
+                // calculate the 1D RGBA buffer start position
+                const pixelStartIndex = index * 4;
+                data[pixelStartIndex]     = r;     // red
+                data[pixelStartIndex + 1] = g;     // green
+                data[pixelStartIndex + 2] = b;     // blue
+                data[pixelStartIndex + 3] = 255;   // alpha
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+        });
+    }
+
     startHeartbeatCheck() {
         // Send periodic heartbeat to maintain WebSocket connection
         setInterval(() => {
@@ -1069,4 +1162,29 @@ function formatValue(value, suffix = '', decimals = 2) {
         return value.toFixed(decimals) + suffix;
     }
     return value.toString() + suffix;
+}
+
+function getProgressiveColor(temp) {
+    // clamp temperature between 0 and 100
+    const clampedTemp = Math.max(0, Math.min(100, temp));
+
+    // map 0 -> 100 to hue 240 (Blue) -> 0 (Red)
+    const hue = 240 - (clampedTemp * 2.4);
+    
+    // HSL to RGB conversion formula
+    return hslToRgb(hue, 100, 40);
+}
+
+function hslToRgb(h, s, l) {
+    s /= 100;
+    l /= 100;
+    const k = n => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    
+    return [
+        Math.round(255 * f(0)), // red
+        Math.round(255 * f(8)), // green
+        Math.round(255 * f(4))  // blue
+    ];
 }
