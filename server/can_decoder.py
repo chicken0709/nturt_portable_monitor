@@ -73,10 +73,10 @@ CAN_MESSAGE_CONFIG = {
     # can logging
     0x421: ("logging", "decode_logging_status", "raw"),
     # tire temperature
-    0x691: ("tire_temp", "decode_tire_temp", "raw"),
-    0x692: ("tire_temp", "decode_tire_temp", "raw"),
-    0x693: ("tire_temp", "decode_tire_temp", "raw"),
-    0x694: ("tire_temp", "decode_tire_temp", "raw")
+    0x595: ("tire_temp", "decode_tire_temp", "raw"),
+    0x596: ("tire_temp", "decode_tire_temp", "raw"),
+    0x597: ("tire_temp", "decode_tire_temp", "raw"),
+    0x598: ("tire_temp", "decode_tire_temp", "raw")
 }
 
 # VCU status bit flags
@@ -234,7 +234,7 @@ class CANDecoder:
 
         try: 
             # decode messages based on subsystem and param_type
-            if subsystem == "inverters" or subsystem == "tire_temp":
+            if subsystem == "inverters":
                 idx = can_id & 0xF
                 if param_type == "raw":
                     handler(data, idx)
@@ -242,6 +242,9 @@ class CANDecoder:
                     handler(decoded, idx)
                 elif param_type == "both":
                     handler(data, decoded, idx)
+            elif subsystem == "tire_temp":
+                idx = (can_id & 0xF) - 4
+                handler(data, idx)
             else:
                 if param_type == "raw":
                     handler(data)
@@ -253,8 +256,11 @@ class CANDecoder:
             # update last_update time
             if subsystem is None:
                 return
-            if subsystem == 'inverters' or subsystem == 'tire_temp':
+            if subsystem == 'inverters':
                 idx = can_id & 0xF
+                self.data_store[subsystem][idx]['last_update'] = time.time()
+            elif subsystem == 'tire_temp':
+                idx = (can_id & 0xF) - 4
                 self.data_store[subsystem][idx]['last_update'] = time.time()
             else:
                 self.data_store[subsystem]['last_update'] = time.time()

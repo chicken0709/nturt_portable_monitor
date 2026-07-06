@@ -808,8 +808,8 @@ class NTURTDashboard {
     initializeTireTempHeatmap() {
         const tireTempIds = ['tire-temp-fl', 'tire-temp-fr', 'tire-temp-rl', 'tire-temp-rr'];
 
-        const width = 24;
-        const height = 32;
+        const width = 32;
+        const height = 24;
        
         tireTempIds.forEach(id => {
             const element = document.getElementById(id);
@@ -844,8 +844,8 @@ class NTURTDashboard {
     updateTireTempHeatmaps(tireTemps) {
         if (!tireTemps) return;
 
-        const width = 24;
-        const height = 32;
+        const width = 32; 
+        const height = 24;
 
         const mapping = [
             { key: 1, id: 'tire-temp-fl' },
@@ -861,33 +861,39 @@ class NTURTDashboard {
             const ctx = element.getContext('2d');
             const tireTempData = tireTemps[key];
 
-            if (!tireTempData || !tireTempData.cell_index || !tireTempData.cell_temperatures) {
+            // cell_index might be 0
+            if (!tireTempData || tireTempData.cell_index === null || !tireTempData.cell_temperatures) {
                 console.log(`Invalid temperature data for tire ${key}`);
                 return;
             }
 
             const startIdx = tireTempData.cell_index;
-            const temps = tireTempData.cell_temperatures;
+            const temps = tireTempData.cell_temperatures; // each temp maps to a whole column
 
             const imageData = ctx.getImageData(0, 0, width, height);
             const data = imageData.data;
 
-            // update the 7 cells
+            // loop through the 7 incoming temperature values
             for (let i = 0; i < temps.length; i++) {
-                const index = startIdx * 7 + i;
+                const colX = (startIdx * 7) + i;
 
-                // safety check
-                if (index < 0 || index >= width * height) continue;
+                // ensure column fits within the canvas width boundaries
+                if (colX < 0 || colX >= width) continue;
 
                 const temp = temps[i];
                 const [r, g, b] = getProgressiveColor(temp);
 
-                // calculate the 1D RGBA buffer start position
-                const pixelStartIndex = index * 4;
-                data[pixelStartIndex]     = r;     // red
-                data[pixelStartIndex + 1] = g;     // green
-                data[pixelStartIndex + 2] = b;     // blue
-                data[pixelStartIndex + 3] = 255;   // alpha
+                // dill this column vertically
+                for (let y = 0; y < height; y++) {
+                    // map 2D grid coordinates (colX, y) to 1D index
+                    const pixelIndex = (y * width) + colX;
+                    const pixelStartIndex = pixelIndex * 4;
+
+                    data[pixelStartIndex]     = r;     // red
+                    data[pixelStartIndex + 1] = g;     // green
+                    data[pixelStartIndex + 2] = b;     // blue
+                    data[pixelStartIndex + 3] = 255;   // alpha
+                }
             }
 
             ctx.putImageData(imageData, 0, 0);
