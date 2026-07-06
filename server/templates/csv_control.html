@@ -65,12 +65,16 @@
             </div>
 
             <div class="panel" id="timelineSection">
-                <div class="flex justify-between">
-                    <div class="panel-header text-[16px]">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                        Timeline
+                <div class="flex justify-between items-baseline gap-4 mb-2 w-full min-w-0">
+                    <div class="panel-header text-[16px] flex items-baseline gap-2 shrink-0">
+                        <svg class="w-5 h-5 shrink-0 self-center" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span>Timeline</span>
                     </div>
-                    <div id="selectedFileName" class="text-sm font-mono text-zinc-400">NONE</div>
+                    <div id="selectedFileName" class="text-xs sm:text-sm font-mono text-zinc-400 truncate max-w-[50%] sm:max-w-xs text-right">
+                        NONE
+                    </div>
                 </div>
                 <div class="grid grid-cols-3 text-center bg-zinc-950 p-3 border border-zinc-800 rounded-lg mb-4">
                     <div>
@@ -90,33 +94,33 @@
                     <div class="timeline-progress" id="timelineProgress" style="width: 0%"></div>
                     <div class="timeline-thumb" id="timelineThumb" style="left: 0%"></div>
                 </div>
-                <div class="flex flex-wrap lg:flex-nowrap items-center justify-between gap-4 mt-2 w-full">
-    
-                    <div class="w-full lg:flex-1 flex items-center bg-zinc-950 p-2 border border-zinc-800 rounded-lg">
-                        <span class="text-[12px] text-zinc-500 mr-4 font-bold">SPEED</span>
+                <div class="flex flex-col lg:flex-row items-stretch justify-between gap-3 mt-4 w-full">
+
+                    <div class="w-full lg:flex-1 flex items-center bg-zinc-950 p-2 border border-zinc-800 rounded-lg h-[46px]">
+                        <span class="text-[12px] text-zinc-500 mr-3 font-bold min-w-[45px]">SPEED</span>
                         <div class="flex justify-between flex-1 gap-1">
-                            <button class="speed-btn px-2 py-1 text-xs flex-1" onclick="setSpeed(0.25)">0.25x</button>
-                            <button class="speed-btn px-2 py-1 text-xs flex-1" onclick="setSpeed(0.5)">0.5x</button>
-                            <button class="speed-btn active px-2 py-1 text-xs flex-1" onclick="setSpeed(1)">1.0x</button>
-                            <button class="speed-btn px-2 py-1 text-xs flex-1" onclick="setSpeed(2)">2.0x</button>
-                            <button class="speed-btn px-2 py-1 text-xs flex-1" onclick="setSpeed(5)">5.0x</button>
+                            <button class="speed-btn px-1 py-1 text-xs flex-1 rounded" onclick="setSpeed(0.25)">0.25x</button>
+                            <button class="speed-btn px-1 py-1 text-xs flex-1 rounded" onclick="setSpeed(0.5)">0.5x</button>
+                            <button class="speed-btn active px-1 py-1 text-xs flex-1 rounded" onclick="setSpeed(1)">1.0x</button>
+                            <button class="speed-btn px-1 py-1 text-xs flex-1 rounded" onclick="setSpeed(2)">2.0x</button>
+                            <button class="speed-btn px-1 py-1 text-xs flex-1 rounded" onclick="setSpeed(5)">5.0x</button>
                         </div>
                     </div>
 
                     <button onclick="togglePause()" id="pauseBtn" 
-                            class="w-full lg:flex-1 py-2 btn-primary flex items-center justify-center gap-2 rounded-lg">
-                        <span class="font-bold">Pause</span>
+                            class="w-full lg:w-[120px] h-[46px] btn-primary flex items-center justify-center gap-2 rounded-lg order-first lg:order-none shrink-0">
+                        <span class="font-bold text-sm">Pause</span>
                     </button>
 
-                    <div class="w-full lg:flex-1 flex items-center bg-zinc-950 p-2 border border-zinc-800 rounded-lg">
-                        <span class="text-[12px] text-zinc-500 mr-4 font-bold">JUMP</span>
-                        <div class="flex justify-between flex-1 gap-1">
-                            <button class="jump-btn px-2 py-1 text-xs flex-1" onclick="jumpTime(-30)">-30s</button>
-                            <button class="jump-btn px-2 py-1 text-xs flex-1" onclick="jumpTime(-10)">-10s</button>
-                            <button class="jump-btn px-2 py-1 text-xs flex-1" onclick="jumpTime(-5)">-5s</button>
-                            <button class="jump-btn px-2 py-1 text-xs flex-1" onclick="jumpTime(5)">+5s</button>
-                            <button class="jump-btn px-2 py-1 text-xs flex-1" onclick="jumpTime(10)">+10s</button>
-                            <button class="jump-btn px-2 py-1 text-xs flex-1" onclick="jumpTime(30)">+30s</button>
+                    <div class="w-full lg:flex-1 flex items-center bg-zinc-950 p-2 border border-zinc-800 rounded-lg h-[46px]">
+                        <span class="text-[11px] sm:text-[12px] text-zinc-500 mr-1.5 sm:mr-4 font-bold min-w-[34px] sm:min-w-[45px]">JUMP</span>
+                        <div class="flex justify-between flex-1 gap-0.5 sm:gap-1">
+                            <button class="jump-btn px-0 py-1 text-[10px] sm:text-xs flex-1 rounded text-center whitespace-nowrap" onclick="jumpTime(-30)">-30s</button>
+                            <button class="jump-btn px-0 py-1 text-[10px] sm:text-xs flex-1 rounded text-center whitespace-nowrap" onclick="jumpTime(-10)">-10s</button>
+                            <button class="jump-btn px-0 py-1 text-[10px] sm:text-xs flex-1 rounded text-center whitespace-nowrap" onclick="jumpTime(-5)">-5s</button>
+                            <button class="jump-btn px-0 py-1 text-[10px] sm:text-xs flex-1 rounded text-center whitespace-nowrap" onclick="jumpTime(5)">+5s</button>
+                            <button class="jump-btn px-0 py-1 text-[10px] sm:text-xs flex-1 rounded text-center whitespace-nowrap" onclick="jumpTime(10)">+10s</button>
+                            <button class="jump-btn px-0 py-1 text-[10px] sm:text-xs flex-1 rounded text-center whitespace-nowrap" onclick="jumpTime(30)">+30s</button>
                         </div>
                     </div>
                     
