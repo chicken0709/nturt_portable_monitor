@@ -874,7 +874,7 @@ class NTURTDashboard {
 
             // update the 7 cells
             for (let i = 0; i < temps.length; i++) {
-                const index = startIdx + i;
+                const index = startIdx * 7 + i;
 
                 // safety check
                 if (index < 0 || index >= width * height) continue;
