@@ -180,10 +180,10 @@ class CANDecoder:
                 'last_update': None
             },
             'tire_temp': {
-                1: {'name': 'FL', 'cell_index': None, 'cell_temperatures': None, 'last_update': None},
-                2: {'name': 'FR', 'cell_index': None, 'cell_temperatures': None, 'last_update': None},
-                3: {'name': 'RL', 'cell_index': None, 'cell_temperatures': None, 'last_update': None},
-                4: {'name': 'RR', 'cell_index': None, 'cell_temperatures': None, 'last_update': None}
+                1: {'name': 'FL', 'cell_temperatures': [None] * 32, 'last_update': None},
+                2: {'name': 'FR', 'cell_temperatures': [None] * 32, 'last_update': None},
+                3: {'name': 'RL', 'cell_temperatures': [None] * 32, 'last_update': None},
+                4: {'name': 'RR', 'cell_temperatures': [None] * 32, 'last_update': None}
             }
         }
 
@@ -494,5 +494,7 @@ class CANDecoder:
             cell_index = data[0]
             temperatures = [data[i] for i in range(1, min(8, len(data)))]
 
-            self.data_store['tire_temp'][idx]['cell_index'] = cell_index
-            self.data_store['tire_temp'][idx]['cell_temperatures'] = temperatures
+            for i, temp in enumerate(temperatures):
+                array_index = cell_index * 7 + i
+                if array_index < 32:
+                    self.data_store['tire_temp'][idx]['cell_temperatures'][array_index] = temp

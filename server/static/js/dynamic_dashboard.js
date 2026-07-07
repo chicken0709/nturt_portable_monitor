@@ -822,16 +822,13 @@ class NTURTDashboard {
             // generate a 2D matrix data
             for (let y = 0; y < height; y++) {
                 for (let x = 0; x < width; x++) {
-                    // initialize to 0
-                    const rgb = getProgressiveColor(0);
-
                     // find the index in the flat 1D canvas array
                     const i = (y * width + x) * 4;
 
-                    // Assign the data elements
-                    data[i]     = rgb[0]; // R
-                    data[i + 1] = rgb[1]; // G
-                    data[i + 2] = rgb[2]; // B
+                    // set default color to gray for uninitialized pixels
+                    data[i]     = 30; // R
+                    data[i + 1] = 30; // G
+                    data[i + 2] = 30; // B
                     data[i + 3] = 255;    // A
                 }
             }
@@ -861,32 +858,26 @@ class NTURTDashboard {
             const ctx = element.getContext('2d');
             const tireTempData = tireTemps[key];
 
-            // cell_index might be 0
-            if (!tireTempData || tireTempData.cell_index === null || !tireTempData.cell_temperatures) {
+            if (!tireTempData) {
                 console.log(`Invalid temperature data for tire ${key}`);
                 return;
             }
 
-            const startIdx = tireTempData.cell_index;
             const temps = tireTempData.cell_temperatures; // each temp maps to a whole column
 
-            const imageData = ctx.getImageData(0, 0, width, height);
+            const imageData = ctx.createImageData(width, height);
             const data = imageData.data;
 
-            // loop through the 7 incoming temperature values
-            for (let i = 0; i < temps.length; i++) {
-                const colX = (startIdx * 7) + i;
-
-                // ensure column fits within the canvas width boundaries
-                if (colX < 0 || colX >= width) continue;
+            // loop through the 32 columns
+            for (let i = 0; i < width; i++) {
 
                 const temp = temps[i];
                 const [r, g, b] = getProgressiveColor(temp);
 
-                // dill this column vertically
+                // fill the column
                 for (let y = 0; y < height; y++) {
                     // map 2D grid coordinates (colX, y) to 1D index
-                    const pixelIndex = (y * width) + colX;
+                    const pixelIndex = (y * width) + i;
                     const pixelStartIndex = pixelIndex * 4;
 
                     data[pixelStartIndex]     = r;     // red
@@ -1171,6 +1162,8 @@ function formatValue(value, suffix = '', decimals = 2) {
 }
 
 function getProgressiveColor(temp) {
+    if (temp === null) return [30, 30, 30]; // gray for null values
+
     // clamp temperature between 0 and 100
     const clampedTemp = Math.max(0, Math.min(100, temp));
 
