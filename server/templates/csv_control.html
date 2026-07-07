@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="lg:h-full">
 <head>
     <title>CSV Replay Control</title>
     <link class="w-5 h-5" rel="icon" href="/static/images/logo.png" type="image/png">
@@ -9,10 +9,9 @@
     <link rel="stylesheet" href="/static/css/csv_control.css">
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="no-scrollbar">
+<body class="no-scrollbar lg:h-full lg:flex lg:flex-col">
 
-    <!-- Header -->
-    <header class="max-w-[1400px] mx-auto flex justify-between items-center border-b border-zinc-800 pb-6 mb-8">
+    <header class="max-w-[1400px] mx-auto flex justify-between items-center border-b border-zinc-800 pb-6 mb-8 w-full shrink-0">
         <div>
             <div class="flex items-center gap-3">
                 <h1 class="text-2xl font-bold uppercase tracking-wider text-white">CSV Replay<span class="text-sky-400"> Control Panel</span></h1>
@@ -26,9 +25,9 @@
         </a>
     </header>
 
-    <div class="max-w-[1400px] mx-auto flex flex-col gap-6">
+    <div class="max-w-[1400px] mx-auto flex flex-col gap-6 lg:flex-1 lg:min-h-0 w-full">
 
-        <section class="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 items-stretch">
+        <section class="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 items-stretch shrink-0">
             
             <div class="panel flex flex-col justify-between">
                 <div class="panel-header text-[16px]">
@@ -128,9 +127,9 @@
             </div>
         </section>
 
-        <section class="grid grid-cols-1 lg:grid-cols-[320px_1fr_1fr] gap-4 items-start">
+        <section class="grid grid-cols-1 lg:grid-cols-[320px_1fr_1fr] gap-4 items-stretch lg:flex-1 lg:min-h-0">
     
-            <div class="panel flex flex-col justify-between h-full">
+            <div class="panel flex flex-col justify-start lg:h-full">
                 <div class="panel-header text-[16px]">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-zinc-500 mr-2">
                         <line x1="4" y1="21" x2="4" y2="14" />
@@ -188,18 +187,18 @@
                 </div>
             </div>
 
-            <div class="panel flex flex-col">
+            <div class="panel flex flex-col lg:h-full">
                 <div class="panel-header justify-between text-[16px]">
                     <span class="flex items-center gap-2 font-bold uppercase">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
                         CSV Files
                     </span>
                 </div>
-                <div id="fileList" class="bg-zinc-950 border border-zinc-800 rounded-lg p-2 h-[178px] overflow-y-auto">
+                <div id="fileList" class="bg-zinc-950 border border-zinc-800 rounded-lg p-2 h-[178px] lg:flex-1 lg:min-h-0 overflow-y-auto">
                 </div>
             </div>
 
-            <div class="panel flex flex-col">
+            <div class="panel flex flex-col lg:h-full">
                 <div class="panel-header justify-between text-[16px]">
                     <span class="flex items-center gap-2 font-bold uppercase">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -214,8 +213,8 @@
                         </svg>
                     </button>
                 </div>
-                <div id="log" class="log-terminal h-[178px] overflow-y-auto font-mono text-[12px] bg-black/50 rounded-lg border border-zinc-800">
-                    </div>
+                <div id="log" class="log-terminal h-[178px] lg:flex-1 lg:min-h-0 overflow-y-auto font-mono text-[12px] bg-black/50 rounded-lg border border-zinc-800">
+                </div>
             </div>
         </section>
 
