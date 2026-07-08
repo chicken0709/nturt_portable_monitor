@@ -497,4 +497,4 @@ class CANDecoder:
             for i, temp in enumerate(temperatures):
                 array_index = cell_index * 7 + i
                 if array_index < 32:
-                    self.data_store['tire_temp'][idx]['cell_temperatures'][array_index] = temp
+                    self.data_store['tire_temp'][idx]['cell_temperatures'][array_index] = temp / 2
