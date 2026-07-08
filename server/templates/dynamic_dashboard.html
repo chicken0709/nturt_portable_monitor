@@ -186,9 +186,23 @@
         <!-- Main Speed and Controls Section -->
         <div class="glass-card rounded-lg p-6 md:p-8 mb-6 flex flex-col items-center justify-center">
             <div class="flex flex-wrap items-center justify-center gap-6 md:gap-12 w-full">
-                <div class="flex flex-col gap-52 transform -translate-y-8">
-                    <canvas id="tire-temp-fl" width="32" height="24" class="w-32 h-24 rounded-2xl border border-slate-700 bg-black image-render-pixelated"></canvas>
-                    <canvas id="tire-temp-rl" width="32" height="24" class="w-32 h-24 rounded-2xl border border-slate-700 bg-black image-render-pixelated"></canvas>
+                <div class="flex flex-col gap-40 transform -translate-y-2">
+                    <div class="flex flex-col items-center gap-2">
+                        <canvas id="tire-temp-fl" width="32" height="24" class="w-32 h-24 rounded-2xl border border-slate-700 bg-black image-render-pixelated"></canvas>
+                        
+                        <div class="flex flex-col items-center text-center">
+                            <span class="text-xs text-slate-400" id="tire-temp-fl-avg">AVG: --°C</span>
+                            <span class="text-xs text-slate-400" id="tire-temp-fl-max">MAX: --°C</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-col items-center gap-2">
+                        <canvas id="tire-temp-rl" width="32" height="24" class="w-32 h-24 rounded-2xl border border-slate-700 bg-black image-render-pixelated"></canvas>
+                        
+                        <div class="flex flex-col items-center text-center">
+                            <span class="text-xs text-slate-400" id="tire-temp-rl-avg">AVG: --°C</span>
+                            <span class="text-xs text-slate-400" id="tire-temp-rl-max">MAX: --°C</span>
+                        </div>
+                    </div>
                 </div>
                 <div class="flex flex-col gap-8 order-2 lg:order-1">
                     <!-- FL Motor -->
@@ -293,9 +307,23 @@
                         <div class="text-xs md:text-sm font-bold text-cyan-400" id="speed-rr-value">0 km/h</div>
                     </div>
                 </div>
-                <div class="flex flex-col gap-52 transform -translate-y-8 order-6 lg:order-6">
-                    <canvas id="tire-temp-fr" width="32" height="24" class="w-32 h-24 rounded-2xl border border-slate-700 bg-black image-render-pixelated"></canvas>
-                    <canvas id="tire-temp-rr" width="32" height="24" class="w-32 h-24 rounded-2xl border border-slate-700 bg-black image-render-pixelated"></canvas>
+                <div class="flex flex-col gap-40 transform -translate-y-2 order-6 lg:order-6">
+                    <div class="flex flex-col items-center gap-2">
+                        <canvas id="tire-temp-fr" width="32" height="24" class="w-32 h-24 rounded-2xl border border-slate-700 bg-black image-render-pixelated"></canvas>
+                        
+                        <div class="flex flex-col items-center text-center">
+                            <span class="text-xs text-slate-400" id="tire-temp-fr-avg">AVG: --°C</span>
+                            <span class="text-xs text-slate-400" id="tire-temp-fr-max">MAX: --°C</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-col items-center gap-2">
+                        <canvas id="tire-temp-rr" width="32" height="24" class="w-32 h-24 rounded-2xl border border-slate-700 bg-black image-render-pixelated"></canvas>
+                        
+                        <div class="flex flex-col items-center text-center">
+                            <span class="text-xs text-slate-400" id="tire-temp-rr-avg">AVG: --°C</span>
+                            <span class="text-xs text-slate-400" id="tire-temp-rr-max">MAX: --°C</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

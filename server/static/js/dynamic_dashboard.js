@@ -865,6 +865,28 @@ class NTURTDashboard {
 
             const temps = tireTempData.cell_temperatures; // each temp maps to a whole column
 
+            // calculate and update average and max temperatures
+            const validTemps = temps.filter(t => t !== null && t !== undefined);
+            
+            let avgStr = "--";
+            let maxStr = "--";
+
+            if (validTemps.length > 0) {
+                const maxVal = Math.max(...validTemps);
+                const sum = validTemps.reduce((acc, curr) => acc + curr, 0);
+                const avgVal = sum / validTemps.length;
+
+                // format to 1 decimal place
+                avgStr = avgVal.toFixed(1);
+                maxStr = maxVal.toFixed(1);
+            }
+
+            const avgEl = document.getElementById(`${id}-avg`);
+            const maxEl = document.getElementById(`${id}-max`);
+            if (avgEl) avgEl.textContent = `AVG: ${avgStr}°C`;
+            if (maxEl) maxEl.textContent = `MAX: ${maxStr}°C`;
+
+            // update heatmap
             const imageData = ctx.createImageData(width, height);
             const data = imageData.data;
 
