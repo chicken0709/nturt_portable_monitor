@@ -1,54 +1,26 @@
 body {
     margin: 0;
     padding: 0;
-    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-    color: white;
+    background-color: #09090b; /* Zinc 950 */
+    color: #f4f4f5;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     min-height: 100vh;
+    box-sizing: border-box;
 }
 
-/* Glass Card Effect */
-.glass-card {
-    background: rgba(30, 41, 59, 0.7);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(148, 163, 184, 0.2);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+::-webkit-scrollbar {width: 10px;}
+::-webkit-scrollbar-track {background: #09090b;}
+::-webkit-scrollbar-thumb {
+    background: #27272a;
+    border-radius: 5px;
+    border: 2px solid #09090b;
 }
-
-/* Home Button */
-.home-button {
-    position: fixed;
-    top: 20px;
-    left: 20px;
-    z-index: 1000;
-    padding: 10px 16px;
-    border-radius: 8px;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    text-decoration: none;
-    color: white;
-    backdrop-filter: blur(10px);
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.9) 0%, rgba(37, 99, 235, 0.9) 100%);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    transition: all 0.3s ease;
-}
-
-.home-button:hover {
-    transform: scale(1.05);
-}
-
-.home-button svg {
-    width: 20px;
-    height: 20px;
+::-webkit-scrollbar-thumb:hover {
+    background: #3f3f46;
 }
 
 /* Connection Indicator */
 .connection-indicator {
-    position: fixed;
-    top: 20px;
-    right: 20px;
     padding: 8px 16px;
     border-radius: 20px;
     font-size: 12px;
@@ -60,15 +32,15 @@ body {
 }
 
 .connection-indicator.connected {
-    background: rgba(34, 197, 94, 0.2);
-    color: #22c55e;
-    border: 1px solid #22c55e;
+    background: rgba(16, 185, 129, 0.1);
+    color: #059669; /* emerald-500 */
+    border: 2px solid #059669;
 }
 
 .connection-indicator.disconnected {
-    background: rgba(239, 68, 68, 0.2);
-    color: #ef4444;
-    border: 1px solid #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444; /* rose-500 */
+    border: 2px solid #ef4444;
 }
 
 .status-dot {
@@ -79,7 +51,7 @@ body {
 }
 
 .status-dot.green {
-    background: #22c55e;
+    background: #059669;
 }
 
 .status-dot.red {
@@ -91,79 +63,10 @@ body {
     50% { opacity: 0.5; }
 }
 
-/* Floating message counter */
-.floating-stats {
-    position: fixed;
-    top: 60px;
-    right: 20px;
-    background: rgba(30, 41, 59, 0.9);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(148, 163, 184, 0.3);
-    border-radius: 12px;
-    padding: 12px 16px;
-    z-index: 1000;
-    min-width: 180px;
-}
-
-.floating-stats-title {
-    font-size: 10px;
-    color: #94a3b8;
-    text-transform: uppercase;
-    margin-bottom: 4px;
-}
-
-.floating-stats-value {
-    font-size: 28px;
-    font-weight: bold;
-    color: #06b6d4;
-    line-height: 1;
-}
-
-.floating-stats-time {
-    font-size: 10px;
-    color: #64748b;
-    margin-top: 4px;
-}
-
-/* Scroll to top button */
-.scroll-to-top {
-    position: fixed;
-    bottom: 30px;
-    left: 15px;
-    width: 56px;
-    height: 56px;
-    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    z-index: 1000;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    transition: all 0.3s;
-    opacity: 0;
-    visibility: hidden;
-}
-
-.scroll-to-top.visible {
-    opacity: 1;
-    visibility: visible;
-}
-
-.scroll-to-top:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
-}
-
-.scroll-to-top svg {
-    width: 24px;
-    height: 24px;
-    fill: white;
-}
-
 /* Cell Display */
 .cell-item {
-    background: rgba(51, 65, 85, 0.5);
+    /* Updated background color from slate to zinc */
+    background: rgba(39, 39, 42, 0.4); /* zinc-800 */
     padding: 4px 8px;
     border-radius: 4px;
     text-align: center;
@@ -174,26 +77,27 @@ body {
 
 .cell-item:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    background: rgba(39, 39, 42, 0.8);
 }
 
 .cell-normal {
-    border-left: 3px solid #22c55e;
+    border-left: 3px solid #059669;
 }
 
 .cell-warning {
-    border-left: 3px solid #eab308;
-    background: rgba(234, 179, 8, 0.1);
+    border-left: 3px solid #f59e0b;
+    background: rgba(245, 158, 11, 0.05);
 }
 
 .cell-danger {
     border-left: 3px solid #ef4444;
-    background: rgba(239, 68, 68, 0.1);
+    background: rgba(239, 68, 68, 0.05);
 }
 
 .cell-label {
     font-size: 0.65rem;
-    color: #94a3b8;
+    color: #a1a1aa; /* zinc-400 */
     margin-bottom: 2px;
 }
 
@@ -205,26 +109,9 @@ body {
 
 /* Collapsible Section */
 .collapsible-header {
-    cursor: pointer;
-    user-select: none;
-    transition: all 0.3s;
     display: flex;
     align-items: center;
     justify-content: space-between;
-}
-
-.collapsible-header:hover {
-    opacity: 0.8;
-}
-
-.collapse-icon {
-    transition: transform 0.3s;
-    font-size: 1.5rem;
-    color: #94a3b8;
-}
-
-.collapse-icon.collapsed {
-    transform: rotate(-90deg);
 }
 
 .collapsible-content {
@@ -234,15 +121,11 @@ body {
     opacity: 1;
 }
 
-.collapsible-content.collapsed {
-    max-height: 0;
-    opacity: 0;
-}
-
 /* Segment Stats */
 .segment-header {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2));
-    border: 1px solid rgba(59, 130, 246, 0.3);
+    /* Updated gradient from purple/blue to a subtle dark zinc layout */
+    background: rgba(39, 39, 42, 0.4);
+    border: 1px solid rgba(63, 63, 70, 0.4);
     border-radius: 8px;
     padding: 12px 16px;
     margin-bottom: 12px;
@@ -255,7 +138,7 @@ body {
 }
 
 .segment-stat-label {
-    color: #94a3b8;
+    color: #a1a1aa;
     margin-right: 4px;
 }
 
@@ -265,11 +148,11 @@ body {
 
 /* Temperature Colors */
 .temp-cold {
-    color: #22c55e;
+    color: #059669;
 }
 
 .temp-warm {
-    color: #eab308;
+    color: #f59e0b;
 }
 
 .temp-hot {
@@ -278,15 +161,17 @@ body {
 
 /* Accumulator Overview Stats */
 .stat-card {
-    background: rgba(51, 65, 85, 0.5);
+    /* Updated background color from slate to zinc */
+    background: rgba(39, 39, 42, 0.4); /* zinc-900/50 */
+    border: 1px solid rgba(39, 39, 42, 0.6); /* zinc-800 */
     border-radius: 12px;
     padding: 16px;
-    border-left: 4px solid #3b82f6;
+    border-left: 4px solid #ffffff; /* Default left border set to Battery Amber */
 }
 
 .stat-label {
     font-size: 0.75rem;
-    color: #94a3b8;
+    color: #71717a;
     text-transform: uppercase;
     margin-bottom: 4px;
 }
@@ -299,22 +184,22 @@ body {
 
 .stat-subtext {
     font-size: 0.75rem;
-    color: #64748b;
+    color: #52525b;
     margin-top: 8px;
 }
 
 .stat-mini {
     font-size: 0.7rem;
-    color: #cbd5e1;
+    color: #a1a1aa;
     margin-top: 4px;
 }
 
 /* Segment Overview */
 .segment-overview-card {
-    background: rgba(51, 65, 85, 0.3);
+    background: rgba(24, 24, 27, 0.3);
     border-radius: 8px;
     padding: 12px;
-    border: 1px solid rgba(148, 163, 184, 0.2);
+    border: 1px solid rgba(63, 63, 70, 0.3);
 }
 
 .segment-overview-voltage-section,
@@ -327,7 +212,7 @@ body {
 }
 
 .segment-overview-voltage-section:hover {
-    background: rgba(139, 92, 246, 0.1);
+    background: rgba(0, 0, 0, 0.1); 
 }
 
 .segment-overview-temp-section {
@@ -335,13 +220,13 @@ body {
 }
 
 .segment-overview-temp-section:hover {
-    background: rgba(251, 146, 60, 0.1);
+    background: rgba(0, 0, 0, 0.1); 
 }
 
 .segment-overview-title {
     font-size: 0.875rem;
     font-weight: 700;
-    color: #94a3b8;
+    color: #a1a1aa;
     margin-bottom: 8px;
 }
 
@@ -356,7 +241,7 @@ body {
 }
 
 .segment-overview-label {
-    color: #64748b;
+    color: #52525b;
     margin-bottom: 2px;
 }
 
@@ -368,12 +253,12 @@ body {
 
 /* Segment Overview Table */
 #segment-overview-table tbody tr {
-    border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+    border-bottom: 1px solid rgb(60, 60, 60);
     transition: background-color 0.2s;
 }
 
 #segment-overview-table tbody tr:hover {
-    background: rgba(59, 130, 246, 0.1);
+    background: rgba(39, 39, 42, 0.4);
 }
 
 #segment-overview-table tbody td {
@@ -382,24 +267,14 @@ body {
 
 #segment-overview-table .segment-name {
     font-weight: 700;
-    color: #94a3b8;
+    color: #a1a1aa;
     cursor: pointer;
-}
-
-#segment-overview-table .voltage-cell {
-    cursor: pointer;
-    transition: background-color 0.2s;
 }
 
 #segment-overview-table .voltage-cell:hover {
-    background: rgba(139, 92, 246, 0.2);
-}
-
-#segment-overview-table .temp-cell {
-    cursor: pointer;
-    transition: background-color 0.2s;
+    background: rgba(50, 50, 50, 0.6);
 }
 
 #segment-overview-table .temp-cell:hover {
-    background: rgba(251, 146, 60, 0.2);
+    background: rgba(50, 50, 50, 0.6);
 }

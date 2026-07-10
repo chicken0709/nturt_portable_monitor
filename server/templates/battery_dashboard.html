@@ -1,6 +1,5 @@
-
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="bg-zinc-950">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,107 +9,121 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/static/css/battery_dashboard.css">
 </head>
-<body>
-    <!-- Home Button -->
-    <a href="/" class="home-button">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
-        </svg>
-        <span>Home</span>
-    </a>
-
-    <!-- Connection Status -->
-    <div id="connection-status" class="connection-indicator disconnected">
-        <span class="status-dot red"></span>
-        <span id="connection-text">Connecting...</span>
-    </div>
-
-    <!-- Floating Message Stats -->
-    <div class="floating-stats">
-        <div class="floating-stats-title">CAN Messages</div>
-        <div class="floating-stats-value" id="floating-message-count">0</div>
-        <div class="floating-stats-time" id="floating-current-time">--:--:--</div>
-    </div>
-
-    <!-- Scroll to Top Button -->
-    <div class="scroll-to-top" id="scrollToTopBtn" onclick="scrollToTop()">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-            <path d="M12 4l-8 8h5v8h6v-8h5z"/>
-        </svg>
-    </div>
-
+<body class="bg-zinc-950 text-zinc-100">
     <div class="container mx-auto px-4 py-6">
         <!-- Header -->
-        <div class="glass-card rounded-lg p-6 mb-6">
-            <h1 class="text-4xl font-bold bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-transparent">
-                NTURT Battery Dashboard
-            </h1>
-            <p class="text-slate-400 mt-2">Real-time Battery Monitoring System</p>
+        <div class="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 font-sans antialiased">
+            <div>
+                <h1 class="text-4xl font-bold text-white tracking-tight">
+                    NTURT <span class="text-sky-400">Battery Dashboard</span>
+                </h1>
+                <p class="text-zinc-500 mt-2 text-sm">Real-time Battery Monitoring System</p>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-4 sm:gap-6 self-stretch sm:self-auto justify-between sm:justify-end">
+                
+                <div class="text-right sm:border-r sm:border-zinc-800 sm:pr-6">
+                    <span class="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">CAN Messages</span>
+                    <div class="flex items-baseline gap-2 justify-end mt-0.5">
+                        <span id="floating-message-count" class="text-xl font-mono font-bold text-sky-400">0</span>
+                    </div>
+                </div>
+
+                <div id="connection-status" class="flex items-center gap-2 bg-zinc-950 border border-zinc-800 px-3 py-2 rounded-lg text-xs font-mono">
+                    <span class="w-2 h-2 rounded-full bg-red-500 status-dot"></span>
+                    <span id="connection-text" class="text-zinc-400">Connecting...</span>
+                </div>
+
+                <a href="/" class="btn-nav text-xs uppercase tracking-wider flex items-center gap-2 px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-400 font-medium hover:text-white hover:border-zinc-700 transition-all">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                    </svg>
+                    Home
+                </a>
+            </div>
         </div>
 
         <!-- Accumulator Overview -->
-        <div class="glass-card rounded-lg p-6 mb-6">
-            <h2 class="text-2xl font-bold text-blue-400 mb-4">Accumulator Overview</h2>
+        <div class="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6 mb-6">
+            <div class="flex items-center gap-3 mb-4">
+                <svg class="w-7 h-7 text-zinc-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="5" y="3" width="14" height="18" rx="2" />
+                    <path d="M9 3V1h6v2" />
+                    <path d="M8 7h8M8 11h8M8 15h8" class="text-zinc-400" stroke-width="2" />
+                </svg>
+
+                <h2 class="text-2xl font-bold text-zinc-400">Accumulator Overview</h2>
+            </div>
+            
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                 <!-- SOC -->
-                <div class="stat-card">
+                <div class="stat-card" style="border-left-color: #ffffff;">
                     <div class="stat-label">State of Charge</div>
-                    <div class="stat-value text-green-400" id="acc-soc">--%</div>
+                    <div class="stat-value text-emerald-600" id="acc-soc">--%</div>
                 </div>
 
                 <!-- Total Voltage -->
-                <div class="stat-card" style="border-left-color: #eab308;">
+                <div class="stat-card" style="border-left-color: #ffffff;">
                     <div class="stat-label">Total Voltage</div>
                     <div class="stat-value text-white" id="acc-voltage">--V</div>
-                    <div class="stat-mini">
+                    <div class="stat-mini text-zinc-500">
                         Max: <span id="acc-voltage-max-seg">--</span> (<span id="acc-voltage-max">--V</span>) | 
                         Min: <span id="acc-voltage-min-seg">--</span> (<span id="acc-voltage-min">--V</span>)
                     </div>
                 </div>
 
                 <!-- Current -->
-                <div class="stat-card" style="border-left-color: #06b6d4;">
+                <div class="stat-card" style="border-left-color: #ffffff;">
                     <div class="stat-label">Current</div>
-                    <div class="stat-value text-cyan-400" id="acc-current-main">--A</div>
+                    <div class="stat-value text-sky-400" id="acc-current-main">--A</div>
                 </div>
 
                 <!-- Average Temperature -->
-                <div class="stat-card" style="border-left-color: #f97316;">
+                <div class="stat-card" style="border-left-color: #ffffff;">
                     <div class="stat-label">Average Temperature</div>
                     <div class="stat-value text-white" id="acc-temp">--°C</div>
-                    <div class="stat-mini">
+                    <div class="stat-mini text-zinc-500">
                         Hottest: <span id="acc-temp-max-seg">--</span> (<span id="acc-temp-max">--°C</span>)
                     </div>
                 </div>
 
                 <!-- Status -->
-                <div class="stat-card" style="border-left-color: #22c55e;">
+                <div class="stat-card" style="border-left-color: #ffffff;">
                     <div class="stat-label">Status</div>
                     <div class="stat-value" id="acc-status">
-                        <span class="text-green-400" id="acc-status-text">OK</span>
+                        <span class="text-emerald-600" id="acc-status-text">--</span>
                     </div>
-                    <div class="stat-subtext" id="acc-error-text">No Errors</div>
+                    <div class="stat-subtext text-zinc-500" id="acc-error-text">--</div>
                 </div>
             </div>
         </div>
 
         <!-- Segment Overview -->
-        <div class="glass-card rounded-lg p-6 mb-6">
-            <h2 class="text-2xl font-bold text-cyan-400 mb-4">Segment Overview (7 Segments)</h2>
+        <div class="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6 mb-6">
+            <div class="flex items-center gap-3 mb-4">
+                <svg class="w-6 h-6 text-zinc-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                    <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                    <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                    <rect x="14" y="14" width="7" height="7" rx="1.5" />
+                </svg>
+                <h2 class="text-2xl font-bold text-zinc-400">Segment Overview (7 Segments)</h2>
+            </div>
+            
             <div class="overflow-x-auto">
                 <table class="w-full text-sm" id="segment-overview-table">
                     <thead>
-                        <tr class="border-b border-slate-600">
-                            <th class="px-4 py-3 text-left text-slate-400 font-semibold">Segment</th>
-                            <th class="px-4 py-3 text-center text-slate-400 font-semibold cursor-pointer hover:bg-purple-900/20" onclick="scrollToSegmentColumn('voltage', 'all')">Avg Voltage</th>
-                            <th class="px-4 py-3 text-center text-slate-400 font-semibold cursor-pointer hover:bg-purple-900/20" onclick="scrollToSegmentColumn('voltage', 'all')">Max Voltage</th>
-                            <th class="px-4 py-3 text-center text-slate-400 font-semibold cursor-pointer hover:bg-purple-900/20" onclick="scrollToSegmentColumn('voltage', 'all')">Min Voltage</th>
-                            <th class="px-4 py-3 text-center text-slate-400 font-semibold cursor-pointer hover:bg-orange-900/20" onclick="scrollToSegmentColumn('temperature', 'all')">Avg Temp</th>
-                            <th class="px-4 py-3 text-center text-slate-400 font-semibold cursor-pointer hover:bg-orange-900/20" onclick="scrollToSegmentColumn('temperature', 'all')">Max Temp</th>
-                            <th class="px-4 py-3 text-center text-slate-400 font-semibold cursor-pointer hover:bg-orange-900/20" onclick="scrollToSegmentColumn('temperature', 'all')">Min Temp</th>
+                        <tr class="border-b border-zinc-700">
+                            <th class="px-4 py-3 text-left text-zinc-400 font-semibold">Segment</th>
+                            <th class="px-4 py-3 text-center text-zinc-400 font-semibold">Avg Voltage</th>
+                            <th class="px-4 py-3 text-center text-zinc-400 font-semibold">Max Voltage</th>
+                            <th class="px-4 py-3 text-center text-zinc-400 font-semibold">Min Voltage</th>
+                            <th class="px-4 py-3 text-center text-zinc-400 font-semibold">Avg Temp</th>
+                            <th class="px-4 py-3 text-center text-zinc-400 font-semibold">Max Temp</th>
+                            <th class="px-4 py-3 text-center text-zinc-400 font-semibold">Min Temp</th>
                         </tr>
                     </thead>
-                    <tbody id="segment-overview-tbody">
+                    <tbody id="segment-overview-tbody" class="text-zinc-200">
                         <!-- Will be populated by JavaScript -->
                     </tbody>
                 </table>
@@ -118,12 +131,21 @@
         </div>
 
         <!-- Cell Voltages -->
-        <div class="glass-card rounded-lg p-6 mb-6">
-            <div class="collapsible-header" onclick="toggleCollapse('voltages')">
-                <h2 class="text-2xl font-bold text-purple-400">Cell Voltages (105 Cells) <span class="text-sm text-slate-400 font-normal">- Unit: V</span></h2>
-                <span class="collapse-icon collapsed" id="voltages-icon">▼</span>
+        <div class="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6 mb-6">
+            <div class="collapsible-header flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <svg class="w-7 h-7 text-zinc-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="12" r="9" stroke="currentColor" class="text-zinc-500" />
+                        
+                        <path d="M13 5.5L8 12.5h3.5L11 18.5l5-7h-3.5L13 5.5z" fill="currentColor" stroke="none" />
+                    </svg>
+
+                    <h2 class="text-2xl font-bold text-zinc-400">
+                        Cell Voltages (105 Cells) 
+                    <span class="text-sm text-zinc-500 font-normal">- Unit: V</span></h2>
+                </div>
             </div>
-            <div class="collapsible-content collapsed" id="voltages-content">
+            <div class="collapsible-content" id="voltages-content">
                 <div class="mt-4" id="cell-voltages-container">
                     <!-- Will be populated by JavaScript -->
                 </div>
@@ -131,22 +153,25 @@
         </div>
 
         <!-- Cell Temperatures -->
-        <div class="glass-card rounded-lg p-6 mb-6">
-            <div class="collapsible-header" onclick="toggleCollapse('temperatures')">
-                <h2 class="text-2xl font-bold text-orange-400">Cell Temperatures (224 Cells) <span class="text-sm text-slate-400 font-normal">- Unit: °C</span></h2>
-                <span class="collapse-icon collapsed" id="temperatures-icon">▼</span>
+        <div class="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6 mb-6">
+            <div class="collapsible-header flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <svg class="w-7 h-7 text-zinc-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M14 4.5a2 2 0 1 0-4 0v9.1a4.5 4.5 0 1 0 4 0V4.5z" />
+                    </svg>
+                    
+                    <h2 class="text-2xl font-bold text-zinc-400">
+                        Cell Temperatures (224 Cells) <span class="text-sm text-zinc-500 font-normal">- Unit: °C</span>
+                    </h2>
+                </div>
             </div>
-            <div class="collapsible-content collapsed" id="temperatures-content">
+            <div class="collapsible-content" id="temperatures-content">
                 <div class="mt-4" id="cell-temperatures-container">
                     <!-- Will be populated by JavaScript -->
                 </div>
             </div>
         </div>
 
-        <!-- Footer -->
-        <div class="glass-card rounded-lg p-4 text-center">
-            <p class="text-slate-400">NTURT Racing Team - Battery Dashboard v1.0</p>
-        </div>
     </div>
 </body>
 </html>

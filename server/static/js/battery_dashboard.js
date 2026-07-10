@@ -1,21 +1,3 @@
-// Scroll to top function
-function scrollToTop() {
-    window.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-    });
-}
-
-// Show/hide scroll to top button based on scroll position
-window.addEventListener('scroll', function() {
-    const scrollBtn = document.getElementById('scrollToTopBtn');
-    if (window.pageYOffset > 300) {
-        scrollBtn.classList.add('visible');
-    } else {
-        scrollBtn.classList.remove('visible');
-    }
-});
-
 // Scroll to specific segment
 function scrollToSegment(type, segmentIndex) {
     // First expand the section if collapsed
@@ -47,35 +29,12 @@ function scrollToSegment(type, segmentIndex) {
             
             // Add highlight effect
             targetElement.style.transition = 'background-color 0.3s';
-            targetElement.style.backgroundColor = 'rgba(59, 130, 246, 0.2)';
+            targetElement.style.backgroundColor = 'rgba(50, 50, 50, 0.6)';
             setTimeout(() => {
                 targetElement.style.backgroundColor = '';
-            }, 2000);
+            }, 1000);
         }
     }, 300); // Wait for collapse animation
-}
-
-// Scroll to segment column (for table header clicks)
-function scrollToSegmentColumn(type, segmentIndex) {
-    // Just expand the appropriate section
-    const contentId = type === 'voltage' ? 'voltages-content' : 'temperatures-content';
-    const iconId = type === 'voltage' ? 'voltages-icon' : 'temperatures-icon';
-    const content = document.getElementById(contentId);
-    const icon = document.getElementById(iconId);
-    
-    if (content.classList.contains('collapsed')) {
-        content.classList.remove('collapsed');
-        icon.classList.remove('collapsed');
-    }
-}
-
-// Toggle collapse function
-function toggleCollapse(section) {
-    const content = document.getElementById(`${section}-content`);
-    const icon = document.getElementById(`${section}-icon`);
-    
-    content.classList.toggle('collapsed');
-    icon.classList.toggle('collapsed');
 }
 
 // WebSocket connection
@@ -87,6 +46,7 @@ ws.onopen = () => {
     console.log('Connected to WebSocket');
     document.getElementById('connection-status').className = 'connection-indicator connected';
     document.getElementById('connection-text').textContent = 'Connected';
+    document.getElementById('connection-text').style.color = '#10b981'; // emerald-500
     document.querySelector('.status-dot').className = 'status-dot green';
 };
 
@@ -94,6 +54,7 @@ ws.onclose = () => {
     console.log('Disconnected from WebSocket');
     document.getElementById('connection-status').className = 'connection-indicator disconnected';
     document.getElementById('connection-text').textContent = 'Disconnected';
+    document.getElementById('connection-text').style.color = '#ef4444'; // rose-500
     document.querySelector('.status-dot').className = 'status-dot red';
 };
 
@@ -117,7 +78,7 @@ function initializeCellDisplays() {
     for (let seg = 0; seg < 7; seg++) {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td class="segment-name" onclick="scrollToSegment('voltage', ${seg})">Segment ${seg}</td>
+            <td class="segment-name" style="color: #38bdf8;" onclick="scrollToSegment('voltage', ${seg})">Segment ${seg}</td>
             <td class="text-center voltage-cell" onclick="scrollToSegment('voltage', ${seg})">
                 <span id="overview-seg${seg}-v-avg">--V</span>
             </td>
@@ -152,8 +113,8 @@ function initializeCellDisplays() {
         headerDiv.className = 'segment-header';
         headerDiv.innerHTML = `
             <div class="flex justify-between items-center">
-                <span id="segment-label-${seg}" class="text-lg font-bold text-blue-300">Segment ${seg}</span>
-                <span class="text-xl font-bold text-cyan-300">
+                <span id="segment-label-${seg}" class="text-lg font-bold text-sky-400">Segment ${seg}</span>
+                <span class="text-xl font-bold text-amber-400">
                     Total: <span id="seg${seg}-voltage-total">--V</span>
                 </span>
             </div>
@@ -203,7 +164,7 @@ function initializeCellDisplays() {
         const headerDiv = document.createElement('div');
         headerDiv.className = 'segment-header';
         headerDiv.innerHTML = `
-            <span class="text-lg font-bold text-orange-300">Segment ${seg}</span>
+            <span class="text-lg font-bold text-sky-400">Segment ${seg}</span>
             <div class="mt-2">
                 <span class="segment-stat">
                     <span class="segment-stat-label">Avg:</span>
@@ -246,11 +207,6 @@ function updateDisplay(data) {
         document.getElementById('floating-message-count').textContent = data.message_count;
     }
 
-    // Update current time
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString();
-    document.getElementById('floating-current-time').textContent = timeStr;
-
     if (!data.accumulator) return;
 
     const acc = data.accumulator;
@@ -260,7 +216,7 @@ function updateDisplay(data) {
         document.getElementById('acc-soc').textContent = acc.soc.toFixed(1) + '%';
     }
 
-    // Update Current - NOW IN SEPARATE FIELD
+    // Update Current
     if (acc.current !== null && acc.current !== undefined) {
         const currentEl = document.getElementById('acc-current-main');
         currentEl.textContent = acc.current.toFixed(2) + 'A';
@@ -302,7 +258,7 @@ function updateDisplay(data) {
             if (totalVoltage >= 441) {
                 voltageEl.className = 'stat-value text-red-400';
             } else if (totalVoltage >= 439) {
-                voltageEl.className = 'stat-value text-yellow-400';
+                voltageEl.className = 'stat-value text-amber-400';
             } else {
                 voltageEl.className = 'stat-value text-white';
             }
@@ -370,7 +326,7 @@ function updateDisplay(data) {
             if (avgTemp >= 70) {
                 tempElement.className = 'stat-value text-red-400';
             } else if (avgTemp >= 50) {
-                tempElement.className = 'stat-value text-yellow-400';
+                tempElement.className = 'stat-value text-amber-400';
             } else {
                 tempElement.className = 'stat-value text-white';
             }
@@ -414,7 +370,7 @@ function updateDisplay(data) {
         statusText.className = 'text-red-400';
     } else {
         statusText.textContent = 'OK';
-        statusText.className = 'text-green-400';
+        statusText.className = 'text-emerald-600';
     }
     document.getElementById('acc-error-text').textContent = errorMessage;
 
@@ -448,7 +404,7 @@ function updateDisplay(data) {
                     } else if (totalSegVoltage >= 62.7) {
                         totalEl.style.color = '#eab308';
                     } else {
-                        totalEl.style.color = '#06b6d4'; // cyan
+                        totalEl.style.color = '#ffffff';
                     }
                 }
 
@@ -537,7 +493,7 @@ function updateDisplay(data) {
                     if ((maxVoltage - minVoltage) > 0.06) {
                         segmentLabel.className = 'text-lg font-bold text-red-400 bg-red-900 bg-opacity-30 px-2 py-1 rounded';
                     } else {
-                        segmentLabel.className = 'text-lg font-bold text-blue-300';     
+                        segmentLabel.className = 'text-lg font-bold text-sky-400';     
                     }
                 }
 
