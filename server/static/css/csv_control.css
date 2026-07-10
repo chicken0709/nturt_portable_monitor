@@ -54,15 +54,12 @@ body {
 
 .panel-header {
     font-size: 0.65rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.15em;
-    color: #71717a;
+    font-weight: 900;
+    color: #a1a1aa;
     margin-bottom: 1.25rem;
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    border-b: 1px solid #1f1f23;
     padding-bottom: 0.5rem;
 }
 
