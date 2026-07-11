@@ -139,7 +139,7 @@ body {
 .steering-wheel {
     width: 200px;
     height: 200px;
-    border: 6px solid #38bdf8;
+    border: 6px solid #2da6d9;
     border-radius: 50%;
     position: relative;
     transition: transform 0.3s ease;

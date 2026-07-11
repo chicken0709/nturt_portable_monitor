@@ -169,7 +169,7 @@ const accelChart = new Chart(document.getElementById('accel-chart'), {
             {
                 label: 'X',
                 data: Array(50).fill(0),
-                borderColor: '#38bdf8',
+                borderColor: '#2da6d9',
                 backgroundColor: 'rgba(24, 24, 27, 0.4)',
                 borderWidth: 3,
                 tension: 0.4
@@ -202,7 +202,7 @@ const gyroChart = new Chart(document.getElementById('gyro-chart'), {
             {
                 label: 'X',
                 data: Array(50).fill(0),
-                borderColor: '#38bdf8',
+                borderColor: '#2da6d9',
                 backgroundColor: 'rgba(24, 24, 27, 0.4)',
                 borderWidth: 3,
                 tension: 0.4
