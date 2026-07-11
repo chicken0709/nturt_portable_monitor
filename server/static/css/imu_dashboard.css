@@ -152,7 +152,7 @@ body {
     left: 50%;
     width: 4px;
     height: 88px;
-    background: #ef4444;
+    background: #dddddd;
     border-radius: 2px;
     transform-origin: bottom center;
     transform: translate(-50%, -100%);
