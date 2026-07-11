@@ -7,134 +7,159 @@
     <link rel="icon" href="/static/images/logo.png" type="image/png">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/loaders/STLLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="/static/js/imu_dashboard.js" defer></script>
     <link rel="stylesheet" href="/static/css/imu_dashboard.css">
 </head>
-<body class="min-h-screen p-6">
-    <!-- 返回主頁按钮 -->
-    <a href="/" class="fixed top-5 left-5 z-50 px-4 py-2 rounded-lg flex items-center space-x-2 text-white font-medium shadow-lg transition-all hover:scale-105" style="backdrop-filter: blur(10px); background: linear-gradient(135deg, rgba(59, 130, 246, 0.9) 0%, rgba(37, 99, 235, 0.9) 100%);">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
-        </svg>
-        <span>Home</span>
-    </a>
-    <!-- Connection Status -->
-    <div id="connection-status" class="connection-indicator disconnected">
-        <div class="status-dot" style="background: currentColor;"></div>
-        <span id="connection-text">Connecting...</span>
-    </div>
-
-    <div class="container mx-auto">
+<body>
+    <div class="container mx-auto px-4 py-6">
         <!-- Header -->
-        <div class="glass-card rounded-xl p-6 mb-6">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-4xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
-                        IMU & Vehicle Dynamics
-                    </h1>
-                    <p class="text-slate-400 mt-2">Real-time Sensor Monitoring & 3D Visualization</p>
+        <div class="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 font-sans antialiased">
+            <div>
+                <h1 class="text-4xl font-bold text-white tracking-tight">
+                    NTURT <span class="text-sky-400">IMU & Vehicle Dynamics</span>
+                </h1>
+                <p class="text-zinc-500 mt-2 text-sm">Real-time Sensor Monitoring & 3D Visualization</p>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-4 sm:gap-6 self-stretch sm:self-auto justify-between sm:justify-end">
+                
+                <div class="text-right sm:border-r sm:border-zinc-800 sm:pr-6">
+                    <span class="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">CAN Messages</span>
+                    <div class="flex items-baseline gap-2 justify-end mt-0.5">
+                        <span id="message-count" class="text-xl font-mono font-bold text-sky-400">0</span>
+                    </div>
                 </div>
-                <div class="text-right">
-                    <div class="text-sm text-slate-400">Messages</div>
-                    <div id="message-count" class="text-3xl font-bold text-cyan-400">0</div>
-                    <div class="text-xs text-slate-500" id="last-update">Waiting for data...</div>
+
+                <div id="connection-status" class="flex items-center gap-2 bg-zinc-950 border border-zinc-800 px-3 py-2 rounded-lg text-xs font-mono">
+                    <span class="w-2 h-2 rounded-full bg-red-500 status-dot"></span>
+                    <span id="connection-text" class="text-zinc-400">Connecting...</span>
                 </div>
+
+                <a href="/" class="btn-nav text-xs tracking-wider flex items-center gap-2 px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-400 font-medium hover:text-white hover:border-zinc-700 transition-all">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                    </svg>
+                    Home
+                </a>
             </div>
         </div>
 
         <!-- Main 3D View & Vehicle Controls -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <div class="grid grid-cols-1 lg:grid-cols-7 gap-6 mb-6">
             <!-- 3D Visualization -->
-            <div class="lg:col-span-2 glass-card rounded-xl p-6">
-                <div class="section-title">
-                    <div class="section-icon bg-purple-500">🎮</div>
-                    <span class="text-purple-400">3D Vehicle Orientation</span>
+            <div class="lg:col-span-4 glass-card rounded-xl p-6">
+                <div class="section-title mb-4">
+                    <svg class="w-6 h-6 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z" class="stroke-zinc-400" />
+                        <path d="M2 7v10l10 5M22 7v10l-10 5" class="stroke-zinc-400" />
+                        <path d="M12 12v10" class="stroke-zinc-400" />
+                    </svg>
+
+                    <h2 class="text-2xl font-bold text-zinc-400">3D Vehicle Orientation</h2>
                 </div>
-                <div id="canvas-container"></div>
-                <div class="mt-4 grid grid-cols-3 gap-4 text-center">
-                    <div>
-                        <div class="data-label">Roll</div>
-                        <div id="euler-roll" class="data-value text-red-400">0.00°</div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6 items-stretch">
+                    <div class="md:col-span-1 flex flex-col justify-between gap-4 h-full">
+                        
+                        <div class="stat-card flex-1 flex flex-col justify-center" style="border-left: 4px solid #ffffff; padding-left: 16px; min-height: 0;">
+                            <div class="stat-label text-left text-xs uppercase tracking-wider text-zinc-400">Roll</div>
+                            <div id="euler-roll" class="stat-value text-left text-3xl font-bold text-sky-400 mt-2">0.00°</div>
+                        </div>
+                        
+                        <div class="stat-card flex-1 flex flex-col justify-center" style="border-left: 4px solid #ffffff; padding-left: 16px; min-height: 0;">
+                            <div class="stat-label text-left text-xs uppercase tracking-wider text-zinc-400">Pitch</div>
+                            <div id="euler-pitch" class="stat-value text-left text-3xl font-bold text-white mt-2">0.00°</div>
+                        </div>
+                        
+                        <div class="stat-card flex-1 flex flex-col justify-center" style="border-left: 4px solid #ffffff; padding-left: 16px; min-height: 0;">
+                            <div class="stat-label text-left text-xs uppercase tracking-wider text-zinc-400">Yaw</div>
+                            <div id="euler-yaw" class="stat-value text-left text-3xl font-bold text-emerald-600 mt-2">0.00°</div>
+                        </div>
                     </div>
-                    <div>
-                        <div class="data-label">Pitch</div>
-                        <div id="euler-pitch" class="data-value text-green-400">0.00°</div>
-                    </div>
-                    <div>
-                        <div class="data-label">Yaw</div>
-                        <div id="euler-yaw" class="data-value text-blue-400">0.00°</div>
-                    </div>
-                </div>
-                <div class="mt-2 text-center text-xs text-slate-400">
-                    💡 3D orientation driven by IMU2 Quaternion (CAN1)
+
+                    <div id="canvas-container" class="md:col-span-3 bg-transparent rounded-lg overflow-hidden">
+                        </div>
+
                 </div>
             </div>
 
             <!-- Steering & Suspension -->
-            <div class="glass-card rounded-xl p-6">
+            <div class="glass-card lg:col-span-3 rounded-xl p-6 flex flex-col h-full">
                 <div class="section-title">
-                    <div class="section-icon bg-cyan-500">🎯</div>
-                    <span class="text-cyan-400">Vehicle Controls</span>
+                    <svg class="w-6 h-6 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M5 10l7-3 7 3" class="stroke-zinc-400" />
+                        <circle cx="5" cy="10" r="1.5" class="fill-zinc-900 stroke-zinc-400" />
+                        <circle cx="19" cy="10" r="1.5" class="fill-zinc-900 stroke-zinc-400" />
+                        
+                        <path d="M5 17l7-2 7 2" class="stroke-zinc-400" />
+                        <circle cx="5" cy="17" r="1.5" class="fill-zinc-900 stroke-zinc-400" />
+                        <circle cx="19" cy="17" r="1.5" class="fill-zinc-900 stroke-zinc-400" />
+                    </svg>
+
+                    <h2 class="text-2xl font-bold text-zinc-400">Chassis Dynamics</h2>
                 </div>
                 
-                <!-- Steering -->
-                <div class="mb-6">
-                    <div class="text-center mb-4">
-                        <div class="data-label">Steering Angle</div>
-                        <div id="steering-angle" class="data-value text-cyan-400">0.0°</div>
-                    </div>
-                    <div class="flex justify-center">
-                        <div id="steering-wheel" class="steering-wheel">
-                            <div class="steering-indicator"></div>
-                            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 2rem;">
-                                🚗
+                <div class="flex flex-col md:flex-row items-stretch justify-between gap-6 w-full grow">
+                    <div class="w-full md:w-[40%] grow flex flex-col items-center justify-center card">
+                        <div class="text-center">
+                            <div class="data-label">Steering Angle</div>
+                        </div>
+                        <div id="steering-angle" class="data-value text-sky-400 py-3">0.0°</div>
+                        <div class="flex justify-center">
+                            <div id="steering-wheel" class="steering-wheel relative">
+                                <div class="steering-indicator"></div>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <!-- Suspension -->
-                <div class="mt-6">
-                    <div class="data-label text-center mb-4">Suspension Travel</div>
-                    <div class="flex justify-around items-end">
-                        <div class="text-center">
-                            <div class="suspension-bar">
-                                <div id="susp-fl-fill" class="suspension-fill" style="height: 50%"></div>
+                    <div class="w-full md:w-[50%] grow flex flex-col justify-center card">
+                        <div class="data-label text-center mb-4">Suspension Travel</div>
+                        
+                        <div class="grid grid-cols-4 gap-1 items-end justify-items-center">
+                            <div class="text-center w-full">
+                                <div class="suspension-bar mx-auto">
+                                    <div id="susp-fl-fill" class="suspension-fill" style="height: 0%"></div>
+                                </div>
+                                <div class="mt-2">
+                                    <div class="text-xs text-slate-400 truncate">FHeave</div>
+                                    <div id="susp-fl-value" class="text-sm font-bold text-sky-400 whitespace-nowrap">0.00cm</div>
+                                </div>
                             </div>
-                            <div class="mt-2">
-                                <div class="text-xs text-slate-400">FHeave</div>
-                                <div id="susp-fl-value" class="text-sm font-bold text-cyan-400">0.000m</div>
+
+                            <div class="text-center w-full">
+                                <div class="suspension-bar mx-auto">
+                                    <div id="susp-rl-fill" class="suspension-fill" style="height: 0%"></div>
+                                </div>
+                                <div class="mt-2">
+                                    <div class="text-xs text-slate-400 truncate">RHeave</div>
+                                    <div id="susp-rl-value" class="text-sm font-bold text-sky-400 whitespace-nowrap">0.00cm</div>
+                                </div>
                             </div>
-                        </div>
-                        <div class="text-center">
-                            <div class="suspension-bar">
-                                <div id="susp-rl-fill" class="suspension-fill" style="height: 50%"></div>
+
+                            <div class="text-center w-full">
+                                <div class="suspension-bar mx-auto">
+                                    <div id="susp-fr-fill" class="suspension-fill" style="height: 0%"></div>
+                                </div>
+                                <div class="mt-2">
+                                    <div class="text-xs text-slate-400 truncate">FRoll</div>
+                                    <div id="susp-fr-value" class="text-sm font-bold text-sky-400 whitespace-nowrap">0.00cm</div>
+                                </div>
                             </div>
-                            <div class="mt-2">
-                                <div class="text-xs text-slate-400">RHeave</div>
-                                <div id="susp-rl-value" class="text-sm font-bold text-cyan-400">0.000m</div>
-                            </div>
-                        </div>
-                        <div class="text-center">
-                            <div class="suspension-bar">
-                                <div id="susp-fr-fill" class="suspension-fill" style="height: 50%"></div>
-                            </div>
-                            <div class="mt-2">
-                                <div class="text-xs text-slate-400">FRoll</div>
-                                <div id="susp-fr-value" class="text-sm font-bold text-cyan-400">0.000m</div>
-                            </div>
-                        </div>
-                        <div class="text-center">
-                            <div class="suspension-bar">
-                                <div id="susp-rr-fill" class="suspension-fill" style="height: 50%"></div>
-                            </div>
-                            <div class="mt-2">
-                                <div class="text-xs text-slate-400">RRoll</div>
-                                <div id="susp-rr-value" class="text-sm font-bold text-cyan-400">0.000m</div>
+
+                            <div class="text-center w-full">
+                                <div class="suspension-bar mx-auto">
+                                    <div id="susp-rr-fill" class="suspension-fill" style="height: 0%"></div>
+                                </div>
+                                <div class="mt-2">
+                                    <div class="text-xs text-slate-400 truncate">RRoll</div>
+                                    <div id="susp-rr-value" class="text-sm font-bold text-sky-400 whitespace-nowrap">0.00cm</div>
+                                </div>
                             </div>
                         </div>
                     </div>
+
                 </div>
             </div>
         </div>
@@ -142,83 +167,91 @@
         <!-- IMU1 Data -->
         <div class="glass-card rounded-xl p-6 mb-6">
             <div class="section-title">
-                <div class="section-icon bg-green-500">📊</div>
-                <span class="text-green-400">IMU1 - Primary Sensors</span>
+                <svg class="w-6 h-6 shrink-0 stroke-zinc-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="5" y="5" width="14" height="14" rx="2" class="fill-zinc-900 stroke-zinc-400" stroke-width="2" />
+                    
+                    <path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3" />
+                    
+                    <path d="M12 9v6M9 12h6"/>
+                    <circle cx="12" cy="12" r="1.5" class="fill-zinc-400" />
+                </svg>
+
+                <h2 class="text-2xl font-bold text-zinc-400">IMU1 - Primary Sensors</h2>
             </div>
             
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <!-- Acceleration KM6 -->
                 <div>
-                    <h4 class="text-sm font-bold text-slate-300 mb-3">Acceleration KM6 (m/s²)</h4>
+                    <h4 class="text-sm font-bold text-slate-200 mb-3">Acceleration KM6 (m/s²)</h4>
                     <div class="imu-grid">
                         <div class="imu-data-item">
                             <div class="data-label">X</div>
-                            <div id="imu1-accel-km6-x" class="text-xl font-bold text-red-400">0.000</div>
+                            <div id="imu1-accel-km6-x" class="text-xl font-bold text-slate-200">0.000</div>
                         </div>
                         <div class="imu-data-item">
                             <div class="data-label">Y</div>
-                            <div id="imu1-accel-km6-y" class="text-xl font-bold text-green-400">0.000</div>
+                            <div id="imu1-accel-km6-y" class="text-xl font-bold text-emerald-600">0.000</div>
                         </div>
                         <div class="imu-data-item">
                             <div class="data-label">Z</div>
-                            <div id="imu1-accel-km6-z" class="text-xl font-bold text-blue-400">0.000</div>
+                            <div id="imu1-accel-km6-z" class="text-xl font-bold text-amber-400">0.000</div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Acceleration KM308 -->
                 <div>
-                    <h4 class="text-sm font-bold text-slate-300 mb-3">Acceleration KM308 (m/s²)</h4>
+                    <h4 class="text-sm font-bold text-slate-200 mb-3">Acceleration KM308 (m/s²)</h4>
                     <div class="imu-grid">
                         <div class="imu-data-item">
                             <div class="data-label">X</div>
-                            <div id="imu1-accel-km308-x" class="text-xl font-bold text-red-400">0.000</div>
+                            <div id="imu1-accel-km308-x" class="text-xl font-bold text-slate-200">0.000</div>
                         </div>
                         <div class="imu-data-item">
                             <div class="data-label">Y</div>
-                            <div id="imu1-accel-km308-y" class="text-xl font-bold text-green-400">0.000</div>
+                            <div id="imu1-accel-km308-y" class="text-xl font-bold text-emerald-600">0.000</div>
                         </div>
                         <div class="imu-data-item">
                             <div class="data-label">Z</div>
-                            <div id="imu1-accel-km308-z" class="text-xl font-bold text-blue-400">0.000</div>
+                            <div id="imu1-accel-km308-z" class="text-xl font-bold text-amber-400">0.000</div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Gyroscope -->
                 <div>
-                    <h4 class="text-sm font-bold text-slate-300 mb-3">Gyroscope (deg/s)</h4>
+                    <h4 class="text-sm font-bold text-slate-200 mb-3">Gyroscope (deg/s)</h4>
                     <div class="imu-grid">
                         <div class="imu-data-item">
                             <div class="data-label">X</div>
-                            <div id="imu1-gyro-x" class="text-xl font-bold text-red-400">0.0</div>
+                            <div id="imu1-gyro-x" class="text-xl font-bold text-slate-200">0.0</div>
                         </div>
                         <div class="imu-data-item">
                             <div class="data-label">Y</div>
-                            <div id="imu1-gyro-y" class="text-xl font-bold text-green-400">0.0</div>
+                            <div id="imu1-gyro-y" class="text-xl font-bold text-emerald-600">0.0</div>
                         </div>
                         <div class="imu-data-item">
                             <div class="data-label">Z</div>
-                            <div id="imu1-gyro-z" class="text-xl font-bold text-blue-400">0.0</div>
+                            <div id="imu1-gyro-z" class="text-xl font-bold text-amber-400">0.0</div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Magnetometer -->
                 <div>
-                    <h4 class="text-sm font-bold text-slate-300 mb-3">Magnetometer (μT)</h4>
+                    <h4 class="text-sm font-bold text-slate-200 mb-3">Magnetometer (μT)</h4>
                     <div class="imu-grid">
                         <div class="imu-data-item">
                             <div class="data-label">X</div>
-                            <div id="imu1-mag-x" class="text-xl font-bold text-red-400">0.0</div>
+                            <div id="imu1-mag-x" class="text-xl font-bold text-slate-200">0.0</div>
                         </div>
                         <div class="imu-data-item">
                             <div class="data-label">Y</div>
-                            <div id="imu1-mag-y" class="text-xl font-bold text-green-400">0.0</div>
+                            <div id="imu1-mag-y" class="text-xl font-bold text-emerald-600">0.0</div>
                         </div>
                         <div class="imu-data-item">
                             <div class="data-label">Z</div>
-                            <div id="imu1-mag-z" class="text-xl font-bold text-blue-400">0.0</div>
+                            <div id="imu1-mag-z" class="text-xl font-bold text-amber-400">0.0</div>
                         </div>
                     </div>
                 </div>
@@ -228,26 +261,34 @@
         <!-- IMU2 Data -->
         <div class="glass-card rounded-xl p-6 mb-6">
             <div class="section-title">
-                <div class="section-icon bg-yellow-500">📡</div>
-                <span class="text-yellow-400">IMU2 - Secondary Sensors</span>
+                <svg class="w-6 h-6 shrink-0 stroke-zinc-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="5" y="5" width="14" height="14" rx="2" class="fill-zinc-900 stroke-zinc-400" stroke-width="2" />
+                    
+                    <path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3" />
+                    
+                    <path d="M12 9v6M9 12h6"/>
+                    <circle cx="12" cy="12" r="1.5" class="fill-zinc-400" />
+                </svg>
+
+                <h2 class="text-2xl font-bold text-zinc-400">IMU2 - Secondary Sensors</h2>
             </div>
             
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <!-- Acceleration -->
                 <div>
                     <h4 class="text-sm font-bold text-slate-300 mb-3">Acceleration (g)</h4>
                     <div class="imu-grid">
                         <div class="imu-data-item">
                             <div class="data-label">X</div>
-                            <div id="imu2-accel-x" class="text-xl font-bold text-red-400">0.000</div>
+                            <div id="imu2-accel-x" class="text-xl font-bold text-slate-200">0.000</div>
                         </div>
                         <div class="imu-data-item">
                             <div class="data-label">Y</div>
-                            <div id="imu2-accel-y" class="text-xl font-bold text-green-400">0.000</div>
+                            <div id="imu2-accel-y" class="text-xl font-bold text-emerald-600">0.000</div>
                         </div>
                         <div class="imu-data-item">
                             <div class="data-label">Z</div>
-                            <div id="imu2-accel-z" class="text-xl font-bold text-blue-400">0.000</div>
+                            <div id="imu2-accel-z" class="text-xl font-bold text-amber-400">0.000</div>
                         </div>
                     </div>
                 </div>
@@ -258,38 +299,38 @@
                     <div class="imu-grid">
                         <div class="imu-data-item">
                             <div class="data-label">X</div>
-                            <div id="imu2-gyro-x" class="text-xl font-bold text-red-400">0.0</div>
+                            <div id="imu2-gyro-x" class="text-xl font-bold text-slate-200">0.0</div>
                         </div>
                         <div class="imu-data-item">
                             <div class="data-label">Y</div>
-                            <div id="imu2-gyro-y" class="text-xl font-bold text-green-400">0.0</div>
+                            <div id="imu2-gyro-y" class="text-xl font-bold text-emerald-600">0.0</div>
                         </div>
                         <div class="imu-data-item">
                             <div class="data-label">Z</div>
-                            <div id="imu2-gyro-z" class="text-xl font-bold text-blue-400">0.0</div>
+                            <div id="imu2-gyro-z" class="text-xl font-bold text-amber-400">0.0</div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Quaternion -->
-                <div>
+                <div class="lg:col-span-2">
                     <h4 class="text-sm font-bold text-slate-300 mb-3">Quaternion</h4>
                     <div class="quaternion-display">
                         <div class="imu-data-item">
                             <div class="data-label">W</div>
-                            <div id="imu2-quat-w" class="text-xl font-bold text-purple-400">0.0000</div>
+                            <div id="imu2-quat-w" class="text-xl font-bold text-slate-200">0.0000</div>
                         </div>
                         <div class="imu-data-item">
                             <div class="data-label">X</div>
-                            <div id="imu2-quat-x" class="text-xl font-bold text-red-400">0.0000</div>
+                            <div id="imu2-quat-x" class="text-xl font-bold text-emerald-600">0.0000</div>
                         </div>
                         <div class="imu-data-item">
                             <div class="data-label">Y</div>
-                            <div id="imu2-quat-y" class="text-xl font-bold text-green-400">0.0000</div>
+                            <div id="imu2-quat-y" class="text-xl font-bold text-amber-400">0.0000</div>
                         </div>
                         <div class="imu-data-item">
                             <div class="data-label">Z</div>
-                            <div id="imu2-quat-z" class="text-xl font-bold text-blue-400">0.0000</div>
+                            <div id="imu2-quat-z" class="text-xl font-bold text-sky-400">0.0000</div>
                         </div>
                     </div>
                 </div>
@@ -301,8 +342,13 @@
             <!-- Acceleration Chart -->
             <div class="glass-card rounded-xl p-6">
                 <div class="section-title">
-                    <div class="section-icon bg-red-500">📈</div>
-                    <span class="text-red-400">Acceleration History</span>
+                    <svg class="w-6 h-6 shrink-0 stroke-zinc-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 19h18"/>
+                        <path d="M3 17c4 0 5-3 8-7s4-5 10-5" stroke-width="2" />
+                        <path d="M18 2l3 3-3 3" stroke-width="1.75" />
+                    </svg>
+    
+                    <h2 class="text-2xl font-bold text-zinc-400">Acceleration History</h2>
                 </div>
                 <div class="chart-container">
                     <canvas id="accel-chart"></canvas>
@@ -312,8 +358,19 @@
             <!-- Gyroscope Chart -->
             <div class="glass-card rounded-xl p-6">
                 <div class="section-title">
-                    <div class="section-icon bg-blue-500">📉</div>
-                    <span class="text-blue-400">Gyroscope History</span>
+                    <svg class="w-6 h-6 shrink-0 stroke-zinc-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="10" y="10" width="4" height="4" rx="1" class="fill-zinc-900 stroke-zinc-400" stroke-width="2" />
+                        
+                        <ellipse cx="12" cy="12" rx="3" ry="8" />
+                        
+                        <ellipse cx="12" cy="12" rx="8" ry="3" />
+                        
+                        <circle cx="12" cy="12" r="10" stroke-dasharray="3 3"/>
+                        
+                        <path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>
+                    </svg>
+
+                    <h2 class="text-2xl font-bold text-zinc-400">Gyroscope History</h2>
                 </div>
                 <div class="chart-container">
                     <canvas id="gyro-chart"></canvas>
@@ -321,10 +378,6 @@
             </div>
         </div>
 
-        <!-- Footer -->
-        <div class="glass-card rounded-xl p-4 text-center">
-            <p class="text-slate-400">NTURT Racing Team - IMU & Dynamics Dashboard v1.0</p>
-        </div>
     </div>
 </body>
 </html>

@@ -65,6 +65,19 @@ ws.onerror = (error) => {
 ws.onmessage = (event) => {
     try {
         const data = JSON.parse(event.data);
+        
+        // update vehicle connection status
+        if (data.vehicle_connected !== undefined) {
+            const statusDiv = document.getElementById('connection-status');
+            if (data.vehicle_connected) {
+                statusDiv.className = 'connection-indicator connected';
+                statusDiv.innerHTML = '<span class="status-dot green"></span><span>Connected</span>';
+            } else {
+                statusDiv.className = 'connection-indicator disconnected';
+                statusDiv.innerHTML = '<span class="status-dot red"></span><span>Disconnected</span>';
+            }
+        }
+
         updateDisplay(data);
     } catch (error) {
         console.error('Error parsing data:', error);

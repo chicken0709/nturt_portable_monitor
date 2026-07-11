@@ -15,8 +15,8 @@ from can_engine import CANEngine
 from csv_engine import CSVEngine
 
 # Configuration
-# SERVER_URL = "ws://140.112.16.226:8889"  # modify this to your server's IP address or hostname
-SERVER_URL = "ws://localhost:8889"
+SERVER_URL = "ws://140.112.16.226:8889"  # modify this to your server's IP address or hostname
+# SERVER_URL = "ws://localhost:8889"
 RECONNECT_DELAY = 5     # reconnection delay (second)
 HEARTBEAT_INTERVAL = 1  # heartbeat interval (second)
 BATCH_SIZE = 50         # batch size for sending messages (increase to improve efficiency)

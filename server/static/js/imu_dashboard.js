@@ -18,14 +18,13 @@ let scene, camera, renderer, vehicleMesh;
 function init3D() {
     const container = document.getElementById('canvas-container');
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0f172a);
 
     camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
     camera.position.z = 5;
     camera.position.y = 2;
     camera.lookAt(0, 0, 0);
 
-    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true});
     renderer.setSize(container.clientWidth, container.clientHeight);
     container.appendChild(renderer.domElement);
 
@@ -33,45 +32,46 @@ function init3D() {
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
     scene.add(ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(5, 5, 5);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+    directionalLight.position.set(10, 10, 10);
     scene.add(directionalLight);
 
-    // Create vehicle (simple box for now)
-    const geometry = new THREE.BoxGeometry(3, 0.5, 1.5);
-    const material = new THREE.MeshPhongMaterial({ 
-        color: 0x3b82f6,
-        specular: 0x111111,
-        shininess: 100
-    });
-    vehicleMesh = new THREE.Mesh(geometry, material);
-    scene.add(vehicleMesh);
-
-    // Add wheels
-    const wheelGeometry = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 16);
-    const wheelMaterial = new THREE.MeshPhongMaterial({ color: 0x1e293b });
+    // --- STL model loading ---
+    const loader = new THREE.STLLoader();
     
-    const wheelPositions = [
-        [-1, -0.3, 0.8],
-        [1, -0.3, 0.8],
-        [-1, -0.3, -0.8],
-        [1, -0.3, -0.8]
-    ];
+    loader.load('/static/models/racecar.stl', function (geometry) {
+        
+        // center the geometry pivot point so it rotates smoothly around its center of mass
+        geometry.center();
 
-    wheelPositions.forEach(pos => {
-        const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
-        wheel.rotation.z = Math.PI / 2;
-        wheel.position.set(...pos);
-        vehicleMesh.add(wheel);
+        // define the material
+        const material = new THREE.MeshPhongMaterial({ 
+            color: 0xaaaaaa,
+            shininess: 0,
+            flatShading: false
+        });
+
+        // create the mesh
+        vehicleMesh = new THREE.Mesh(geometry, material); 
+
+        // scale adjustment
+        vehicleMesh.scale.set(0.00175, 0.00175, 0.00175);
+
+        vehicleMesh.position.y = 0.8; // raise the car slightly above the grid
+
+        // add to layout
+        scene.add(vehicleMesh);
+
+    }, function (xhr) {
+        console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+    }, function (error) {
+        console.error('An error occurred while loading car.stl:', error);
     });
 
     // Grid
-    const gridHelper = new THREE.GridHelper(10, 10, 0x334155, 0x1e293b);
+    const gridHelper = new THREE.GridHelper(16, 16, 0x262626, 0x262626);
+    gridHelper.position.y = -0.5;
     scene.add(gridHelper);
-
-    // Axes helper
-    const axesHelper = new THREE.AxesHelper(2);
-    scene.add(axesHelper);
 
     animate3D();
 }
@@ -128,23 +128,33 @@ const chartConfig = {
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
+        elements: {
+            point: {
+                radius: 0      // hide the point dots
+            }
+        },
         scales: {
             x: {
-                display: false
+                grid: {
+                    color: 'rgba(148, 163, 184, 0.1)'
+                },
+                ticks: {
+                    display: false 
+                }
             },
             y: {
                 grid: {
                     color: 'rgba(148, 163, 184, 0.1)'
                 },
                 ticks: {
-                    color: '#94a3b8'
+                    color: '#dddddd'
                 }
             }
         },
         plugins: {
             legend: {
                 labels: {
-                    color: '#e2e8f0'
+                    color: '#ffffff'
                 }
             }
         }
@@ -159,25 +169,25 @@ const accelChart = new Chart(document.getElementById('accel-chart'), {
             {
                 label: 'X',
                 data: Array(50).fill(0),
-                borderColor: '#ef4444',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                borderWidth: 2,
+                borderColor: '#38bdf8',
+                backgroundColor: 'rgba(24, 24, 27, 0.4)',
+                borderWidth: 3,
                 tension: 0.4
             },
             {
                 label: 'Y',
                 data: Array(50).fill(0),
-                borderColor: '#22c55e',
-                backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                borderWidth: 2,
+                borderColor: '#cccccc',
+                backgroundColor: 'rgba(24, 24, 27, 0.4)',
+                borderWidth: 3,
                 tension: 0.4
             },
             {
                 label: 'Z',
                 data: Array(50).fill(0),
-                borderColor: '#3b82f6',
-                backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                borderWidth: 2,
+                borderColor: '#059669',
+                backgroundColor: 'rgba(24, 24, 27, 0.4)',
+                borderWidth: 3,
                 tension: 0.4
             }
         ]
@@ -192,25 +202,25 @@ const gyroChart = new Chart(document.getElementById('gyro-chart'), {
             {
                 label: 'X',
                 data: Array(50).fill(0),
-                borderColor: '#ef4444',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                borderWidth: 2,
+                borderColor: '#38bdf8',
+                backgroundColor: 'rgba(24, 24, 27, 0.4)',
+                borderWidth: 3,
                 tension: 0.4
             },
             {
                 label: 'Y',
                 data: Array(50).fill(0),
-                borderColor: '#22c55e',
-                backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                borderWidth: 2,
+                borderColor: '#cccccc',
+                backgroundColor: 'rgba(24, 24, 27, 0.4)',
+                borderWidth: 3,
                 tension: 0.4
             },
             {
                 label: 'Z',
                 data: Array(50).fill(0),
-                borderColor: '#3b82f6',
-                backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                borderWidth: 2,
+                borderColor: '#059669',
+                backgroundColor: 'rgba(24, 24, 27, 0.4)',
+                borderWidth: 3,
                 tension: 0.4
             }
         ]
@@ -359,7 +369,7 @@ function updateIMU2(imu2) {
 ws.onmessage = function(event) {
     const data = JSON.parse(event.data);
     
-    // 更新车辆连接状态
+    // update vehicle connection status
     if (data.vehicle_connected !== undefined) {
         const statusDiv = document.getElementById('connection-status');
         if (data.vehicle_connected) {
@@ -374,11 +384,11 @@ ws.onmessage = function(event) {
     // Update message count
     document.getElementById('message-count').textContent = data.message_count || 0;
     
-    // Update last update time
-    if (data.update_time) {
-        const time = new Date(data.update_time);
-        document.getElementById('last-update').textContent = time.toLocaleTimeString();
-    }
+    // // Update last update time
+    // if (data.update_time) {
+    //     const time = new Date(data.update_time);
+    //     document.getElementById('last-update').textContent = time.toLocaleTimeString();
+    // }
 
     // Update IMU data
     if (data.imu) {
