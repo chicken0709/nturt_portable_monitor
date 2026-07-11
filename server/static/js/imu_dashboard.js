@@ -39,7 +39,7 @@ function init3D() {
     // --- STL model loading ---
     const loader = new THREE.STLLoader();
     
-    loader.load('/static/models/racecar.stl', function (geometry) {
+    loader.load('/static/models/racecar.STL', function (geometry) {
         
         // center the geometry pivot point so it rotates smoothly around its center of mass
         geometry.center();
