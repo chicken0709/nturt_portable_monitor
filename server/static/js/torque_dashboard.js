@@ -4,6 +4,53 @@ const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
 
 // Chart data storage - keep only 20 seconds of data (assuming ~10 updates per second = 200 data points)
 const maxDataPoints = 200; // 20 seconds at 10 Hz
+
+const torqueDataFront = {
+    labels: [],
+    datasets: [
+        { 
+            label: 'FL', 
+            data: [], 
+            borderColor: '#eab308', 
+            backgroundColor: 'rgba(234, 179, 8, 0.1)',
+            borderWidth: 2,
+            tension: 0.1,
+            pointRadius: 0,
+            hidden: false 
+        },
+        { 
+            label: 'FR', 
+            data: [], 
+            borderColor: '#ef4444', 
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            borderWidth: 2,
+            tension: 0.1,
+            pointRadius: 0,
+            hidden: false 
+        },
+        { 
+            label: 'FL(FB)', 
+            data: [], 
+            borderColor: '#3b82f6', 
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            borderWidth: 2,
+            tension: 0.1,
+            pointRadius: 0,
+            hidden: false 
+        },
+        { 
+            label: 'FR(FB)', 
+            data: [], 
+            borderColor: '#22c55e', 
+            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+            borderWidth: 2,
+            tension: 0.1,
+            pointRadius: 0,
+            hidden: false 
+        }
+    ]
+};
+
 const torqueData = {
     labels: [],
     datasets: [
@@ -100,6 +147,102 @@ const rpmData = {
 const errorMarkers = [];
 
 // Initialize charts
+const torqueChartFront = new Chart(document.getElementById('torque-chart-front'), {
+    type: 'line',
+    data: torqueDataFront,
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: {
+            mode: 'index',
+            intersect: false,
+        },
+        scales: {
+            x: {
+                display: true,
+                title: {
+                    display: false
+                },
+                grid: { 
+                    display: true,
+                    color: 'rgba(148, 163, 184, 0.3)',
+                    drawBorder: true,
+                    drawOnChartArea: true,
+                    drawTicks: true,
+                    lineWidth: 1
+                },
+                ticks: { 
+                    color: '#e2e8f0',
+                    maxRotation: 45,
+                    minRotation: 45,
+                    autoSkip: true,
+                    maxTicksLimit: 8,
+                    font: {
+                        size: 11
+                    },
+                    callback: function(value, index, ticks) {
+                        // Show actual timestamps from data
+                        return this.getLabelForValue(value);
+                    }
+                }
+            },
+            y: {
+                display: true,
+                min: -20,
+                max: 20,
+                title: {
+                    display: true,
+                    text: 'Torque (Nm)',
+                    color: '#94a3b8',
+                    font: { size: 12 }
+                },
+                ticks: {
+                    stepSize: 5,
+                    color: '#94a3b8'
+                },
+                grid: { 
+                    display: true,
+                    color: 'rgba(148, 163, 184, 0.3)',
+                    drawBorder: true,
+                    drawOnChartArea: true,
+                    drawTicks: true,
+                    lineWidth: 1
+                }
+            }
+        },
+        plugins: {
+            legend: { 
+                display: true,
+                position: 'top',
+                align: 'center',
+                labels: {
+                    color: '#ffffff',
+                    usePointStyle: true,
+                    pointStyle: 'rect',
+                    boxWidth: 20,
+                    boxHeight: 10,
+                    padding: 15,
+                    font: {
+                        size: 12,
+                        weight: 'bold'
+                    }
+                },
+                onClick: function(e, legendItem, legend) {
+                    const index = legendItem.datasetIndex;
+                    const chart = legend.chart;
+                    const meta = chart.getDatasetMeta(index);
+                    meta.hidden = !meta.hidden;
+                    chart.update();
+                }
+            },
+            annotation: {
+                annotations: {}
+            }
+        }
+    }
+});
+
 const torqueChart = new Chart(document.getElementById('torque-chart'), {
     type: 'line',
     data: torqueData,
@@ -455,6 +598,23 @@ function updateCharts(data) {
     const timestamp = `${displayHours}:${minutes}:${seconds} ${ampm}`;
 
     // Add new data point
+    if (torqueDataFront.labels.length >= maxDataPoints) {
+        torqueDataFront.labels.shift();
+        torqueDataFront.datasets.forEach(ds => ds.data.shift());
+        
+        // Shift all error marker positions as data scrolls left
+        const annotations = torqueChartFront.options.plugins.annotation.annotations;
+        Object.keys(annotations).forEach(key => {
+            if (annotations[key].xMin > 0) {
+                annotations[key].xMin--;
+                annotations[key].xMax--;
+            } else {
+                // Remove markers that have scrolled off the left side
+                delete annotations[key];
+            }
+        });
+    }
+
     if (torqueData.labels.length >= maxDataPoints) {
         torqueData.labels.shift();
         rpmData.labels.shift();
@@ -474,8 +634,73 @@ function updateCharts(data) {
         });
     }
 
+    torqueDataFront.labels.push(timestamp);
     torqueData.labels.push(timestamp);
     rpmData.labels.push(timestamp);
+
+    // Update torque data: FL, FR, FL(FB), FR(FB)
+    const fl = data.inverters[1];  // FL motor
+    const fr = data.inverters[2];  // FR motor
+
+    if (fl) {
+        torqueDataFront.datasets[0].data.push(fl.target_torque || 0);  // FL target
+        torqueDataFront.datasets[2].data.push(fl.torque || 0);  // FL feedback
+        
+        // Check for FL error
+        if (fl.status && Array.isArray(fl.status) && fl.status.length >= 2) {
+            const errorCode = fl.status[1];
+            if (errorCode !== 0x0000 && errorCode !== null) {
+                const markerId = `error-${Date.now()}-fl`;
+                torqueChartFront.options.plugins.annotation.annotations[markerId] = {
+                    type: 'line',
+                    xMin: torqueDataFront.labels.length - 1,
+                    xMax: torqueDataFront.labels.length - 1,
+                    borderColor: '#ef4444',
+                    borderWidth: 3,
+                    label: {
+                        display: true,
+                        content: 'FL',
+                        position: 'start',
+                        color: '#ffffff',
+                        backgroundColor: 'rgba(239, 68, 68, 0.8)'
+                    }
+                };
+            }
+        }
+    } else {
+        torqueDataFront.datasets[0].data.push(0);
+        torqueDataFront.datasets[2].data.push(0);
+    }
+    
+    if (fr) {
+        torqueDataFront.datasets[1].data.push(fr.target_torque || 0);  // FR target
+        torqueDataFront.datasets[3].data.push(fr.torque || 0);  // FR feedback
+        
+        // Check for FR error
+        if (fr.status && Array.isArray(fr.status) && fr.status.length >= 2) {
+            const errorCode = fr.status[1];
+            if (errorCode !== 0x0000 && errorCode !== null) {
+                const markerId = `error-${Date.now()}-fr`;
+                torqueChartFront.options.plugins.annotation.annotations[markerId] = {
+                    type: 'line',
+                    xMin: torqueDataFront.labels.length - 1,
+                    xMax: torqueDataFront.labels.length - 1,
+                    borderColor: '#ef4444',
+                    borderWidth: 3,
+                    label: {
+                        display: true,
+                        content: 'FR',
+                        position: 'start',
+                        color: '#ffffff',
+                        backgroundColor: 'rgba(239, 68, 68, 0.8)'
+                    }
+                };
+            }
+        }
+    } else {
+        torqueDataFront.datasets[1].data.push(0);
+        torqueDataFront.datasets[3].data.push(0);
+    }
 
     // Update torque data: RL, RR, RL(FB), RR(FB)
     const rl = data.inverters[3];  // RL motor
@@ -555,6 +780,7 @@ function updateCharts(data) {
         }
     }
 
+    torqueChartFront.update();
     torqueChart.update();
     rpmChart.update();
 }
