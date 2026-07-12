@@ -9,6 +9,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/loaders/STLLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
     <script src="/static/js/imu_dashboard.js" defer></script>
     <link rel="stylesheet" href="/static/css/imu_dashboard.css">
 </head>
@@ -47,9 +48,9 @@
         </div>
 
         <!-- Main 3D View & Vehicle Controls -->
-        <div class="grid grid-cols-1 lg:grid-cols-7 gap-6 mb-6">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             <!-- 3D Visualization -->
-            <div class="lg:col-span-4 glass-card rounded-xl p-6">
+            <div class="lg:col-span-1 glass-card rounded-xl p-6">
                 <div class="section-title mb-4">
                     <svg class="w-6 h-6 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M12 2L2 7l10 5 10-5-10-5z" class="stroke-zinc-400" />
@@ -86,7 +87,7 @@
             </div>
 
             <!-- Steering & Suspension -->
-            <div class="glass-card lg:col-span-3 rounded-xl p-6 flex flex-col h-full">
+            <div class="glass-card lg:col-span-1 rounded-xl p-6 flex flex-col h-full">
                 <div class="section-title">
                     <svg class="w-6 h-6 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M5 10l7-3 7 3" class="stroke-zinc-400" />
@@ -102,8 +103,8 @@
                 </div>
                 
                 <div class="flex flex-col md:flex-row items-stretch justify-between gap-6 w-full grow">
-                    <div class="w-full md:w-[40%] grow flex flex-col items-center justify-center card">
-                        <div class="text-center">
+                    <div class="w-full md:w-[27.5%] grow flex flex-col items-center justify-start card">
+                        <div class="text-center mt-11">
                             <div class="data-label">Steering Angle</div>
                         </div>
                         <div id="steering-angle" class="data-value text-sky-400 py-3">0.0°</div>
@@ -114,8 +115,17 @@
                         </div>
                     </div>
 
-                    <div class="w-full md:w-[50%] grow flex flex-col justify-center card">
-                        <div class="data-label text-center mb-4">Suspension Travel</div>
+                    <div class="w-full md:w-[27.5%] grow flex flex-col gap-12 items-center justify-start card">
+                        <div class="text-center mt-11">
+                            <div class="data-label">Traction Circle</div>
+                        </div>
+                        <div class="w-full aspect-square">
+                            <canvas id="traction-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="w-full md:w-[35%] grow flex flex-col justify-start card">
+                        <div class="data-label text-center mt-11 mb-4">Suspension Travel</div>
                         
                         <div class="grid grid-cols-4 gap-1 items-end justify-items-center">
                             <div class="text-center w-full">

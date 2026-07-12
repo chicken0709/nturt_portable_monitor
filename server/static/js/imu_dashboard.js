@@ -237,6 +237,93 @@ function updateChart(chart, x, y, z) {
     chart.update('none');
 }
 
+// traction circle chart
+const tractionChartConfig = {
+    type: 'scatter',
+    data: {
+        datasets: [{
+            data: [{ x: 0, y: 0 }], 
+            backgroundColor: '#dddddd', 
+            pointRadius: 6,
+            pointHoverRadius: 6,
+            showLine: false
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        aspectRatio: 1, 
+        clip: false,    
+        animation: false,
+        layout: { padding: 0 },
+        scales: {
+            x: {
+                min: -2,
+                max: 2,
+                position: 'center',
+                grid: { color: 'rgba(148, 163, 184, 0.1)' },
+                // ticks: { 
+                //     stepSize: 0.5,
+                //     color: '#dddddd',
+                //     callback: function(value) {
+                //         if (value === 1 || value === 2 || value === -1 || value === -2) {
+                //             return value + 'g';
+                //         }
+                //         return '';
+                //     } 
+                // }
+                ticks: { stepSize: 0.5, display: false }
+            },
+            y: {
+                min: -2,
+                max: 2,
+                position: 'center',
+                grid: { color: 'rgba(148, 163, 184, 0.1)' },
+                // ticks: { 
+                //     stepSize: 0.5,
+                //     color: '#dddddd', 
+                //     callback: function(value) {
+                //         if (value === 1 || value === 2 || value === -1 || value === -2) {
+                //             return value + 'g';
+                //         }
+                //         return '';
+                //     }
+                // }
+                ticks: { stepSize: 0.5, display: false }
+            }
+        },
+        plugins: {
+            legend: { display: false },
+            annotation: {
+                annotations: {
+                    innerCircle: {
+                        type: 'ellipse',
+                        xMin: -1, xMax: 1, yMin: -1, yMax: 1,
+                        backgroundColor: 'transparent',
+                        borderColor: '#2da6d9',
+                        borderWidth: 3
+                    },
+                    outerCircle: {
+                        type: 'ellipse',
+                        xMin: -2, xMax: 2, yMin: -2, yMax: 2,
+                        backgroundColor: 'transparent',
+                        borderColor: '#2da6d9',
+                        borderWidth: 3
+                    }
+                }
+            }
+        }
+    },
+};
+
+// Initialize
+const tractionChart = new Chart(document.getElementById('traction-chart'), tractionChartConfig);
+
+function updateLiveGForce(latG, longG) {
+    tractionChart.data.datasets[0].data[0] = { x: latG, y: longG };
+    tractionChart.update();
+}
+
 // Data Update Functions
 function formatValue(value, decimals = 3) {
     if (value === null || value === undefined) return 'N/A';
@@ -300,6 +387,7 @@ function updateIMU1(imu) {
         
         // Update acceleration chart
         updateChart(accelChart, imu.accel_km308.x, imu.accel_km308.y, imu.accel_km308.z);
+        updateLiveGForce(imu.accel_km308.y, imu.accel_km308.x); // Lateral G = Y, Longitudinal G = X
     }
 
     // Gyroscope
