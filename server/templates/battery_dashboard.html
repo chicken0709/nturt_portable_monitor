@@ -7,6 +7,8 @@
     <link rel="icon" href="/static/images/logo.png" type="image/png">
     <script src="/static/js/battery_dashboard.js" defer></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
     <link rel="stylesheet" href="/static/css/battery_dashboard.css">
 </head>
 <body class="bg-zinc-950 text-zinc-100">
@@ -128,6 +130,78 @@
                     </tbody>
                 </table>
             </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <div class="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <svg class="w-6 h-6 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 20h18" class="stroke-zinc-400" />
+                        <path d="M5 16l3-5l4 6l4-8l3 3" class="stroke-zinc-400" />
+                        <circle cx="3" cy="20" r="1.5" class="fill-zinc-400 stroke-zinc-400" />
+                    </svg>
+                    <div class="flex justify-between w-full items-center">
+                        <span class="text-xl font-bold text-zinc-400">SOC History</span>
+                        <div class="mt-1 ml-auto text-right">
+                            <span class="text-sm text-zinc-500 font-normal">Last Update:</span>
+                            <span class="text-sm text-zinc-400 font-normal" id="soc-last-update">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-container-small flex-1 min-w-0 mt-12">
+                    <canvas id="soc-chart"></canvas>
+                </div>
+            </div>
+            <div class="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <svg class="w-6 h-6 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 20h18" class="stroke-zinc-400" />
+                        <path d="M5 16l3-5l4 6l4-8l3 3" class="stroke-zinc-400" />
+                        <circle cx="3" cy="20" r="1.5" class="fill-zinc-400 stroke-zinc-400" />
+                    </svg>
+                    <div class="flex justify-between w-full items-center">
+                        <span class="text-xl font-bold text-zinc-400">Total Voltage History</span>
+                        <div class="mt-1 ml-auto text-right">
+                            <span class="text-sm text-zinc-500 font-normal">Last Update:</span>
+                            <span class="text-sm text-zinc-400 font-normal" id="total-voltage-last-update">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-container-small flex-1 min-w-0 mt-12">
+                    <canvas id="total-voltage-chart"></canvas>
+                </div>
+            </div>  
+            <div class="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <svg class="w-6 h-6 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 20h18" class="stroke-zinc-400" />
+                        <path d="M5 16l3-5l4 6l4-8l3 3" class="stroke-zinc-400" />
+                        <circle cx="3" cy="20" r="1.5" class="fill-zinc-400 stroke-zinc-400" />
+                    </svg>
+                    <div class="flex justify-between w-full items-center">
+                        <span class="text-xl font-bold text-zinc-400">Battery Temperature History</span>
+                        <div class="mt-1 ml-auto text-right">
+                            <span class="text-sm text-zinc-500 font-normal">Last Update:</span>
+                            <span class="text-sm text-zinc-400 font-normal" id="battery-temperature-last-update">--</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- <div class="flex items-center justify-between">
+                    <span class="text-sm text-zinc-500 font-normal">Previous Max:</span><span class="text-sm text-zinc-400 font-normal ml-1" id="prev-max-temp">--°C</span>
+                    <div id="refresh-button">
+                        <svg class="w-5 h-5 text-zinc-400 hover:text-sky-400 cursor-pointer transition-transform duration-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M4.93 4.93a10 10 0 1 1-1.414 1.414" />
+                            <path d="M4.93 4.93v5.657h5.657" />
+                        </svg>
+                    </div>
+                </div> -->
+
+                <div class="chart-container-small flex-1 min-w-0">
+                    <canvas id="battery-temperature-chart"></canvas>
+                </div>
+            </div>  
         </div>
 
         <!-- Cell Voltages -->

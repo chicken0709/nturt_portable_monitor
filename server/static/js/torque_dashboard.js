@@ -239,7 +239,7 @@ const throttleChart = new Chart(document.getElementById('throttle-chart'), {
                 },
                 grid: { 
                     display: true,
-                    color: 'rgba(148, 163, 184, 0.1)',
+                    color: 'rgba(181, 181, 181, 0.3)',
                     drawBorder: true,
                     drawOnChartArea: true,
                     drawTicks: true,
@@ -285,7 +285,7 @@ const brakeChart = new Chart(document.getElementById('brake-chart'), {
                 },
                 grid: { 
                     display: true,
-                    color: 'rgba(148, 163, 184, 0.1)',
+                    color: 'rgba(181, 181, 181, 0.3)',
                     drawBorder: true,
                     drawOnChartArea: true,
                     drawTicks: true,
@@ -322,7 +322,7 @@ const torqueChartFront = new Chart(document.getElementById('torque-chart-front')
                 },
                 grid: { 
                     display: true,
-                    color: 'rgba(148, 163, 184, 0.1)',
+                    color: 'rgba(181, 181, 181, 0.3)',
                     drawBorder: true,
                     drawOnChartArea: true,
                     drawTicks: true,
@@ -360,7 +360,7 @@ const torqueChartFront = new Chart(document.getElementById('torque-chart-front')
                 },
                 grid: { 
                     display: true,
-                    color: 'rgba(148, 163, 184, 0.1)',
+                    color: 'rgba(181, 181, 181, 0.3)',
                     drawBorder: true,
                     drawOnChartArea: true,
                     drawTicks: true,
@@ -441,7 +441,7 @@ const torqueChartRear = new Chart(document.getElementById('torque-chart-rear'), 
                 },
                 grid: { 
                     display: true,
-                    color: 'rgba(148, 163, 184, 0.1)',
+                    color: 'rgba(181, 181, 181, 0.3)',
                     drawBorder: true,
                     drawOnChartArea: true,
                     drawTicks: true,
@@ -479,7 +479,7 @@ const torqueChartRear = new Chart(document.getElementById('torque-chart-rear'), 
                 },
                 grid: { 
                     display: true,
-                    color: 'rgba(148, 163, 184, 0.1)',
+                    color: 'rgba(181, 181, 181, 0.3)',
                     drawBorder: true,
                     drawOnChartArea: true,
                     drawTicks: true,
@@ -560,7 +560,7 @@ const rpmChart = new Chart(document.getElementById('rpm-chart'), {
                 },
                 grid: { 
                     display: true,
-                    color: 'rgba(148, 163, 184, 0.3)',
+                    color: 'rgba(181, 181, 181, 0.3)',
                     drawBorder: true,
                     drawOnChartArea: true,
                     drawTicks: true,
@@ -598,7 +598,7 @@ const rpmChart = new Chart(document.getElementById('rpm-chart'), {
                 },
                 grid: { 
                     display: true,
-                    color: 'rgba(148, 163, 184, 0.1)',
+                    color: 'rgba(181, 181, 181, 0.3)',
                     drawBorder: true,
                     drawOnChartArea: true,
                     drawTicks: true,

@@ -137,7 +137,7 @@ const chartConfig = {
             x: {
                 display: false,
                 grid: {
-                    color: 'rgba(148, 163, 184, 0.1)'
+                    color: 'rgba(181, 181, 181, 0.3)'
                 },
                 ticks: {
                     display: false 
@@ -145,7 +145,7 @@ const chartConfig = {
             },
             y: {
                 grid: {
-                    color: 'rgba(148, 163, 184, 0.1)'
+                    color: 'rgba(181, 181, 181, 0.3)'
                 },
                 ticks: {
                     color: '#dddddd'
@@ -262,7 +262,7 @@ const tractionChartConfig = {
                 min: -2,
                 max: 2,
                 position: 'center',
-                grid: { color: 'rgba(148, 163, 184, 0.1)' },
+                grid: { color: 'rgba(150, 150, 150, 0.3)' },
                 // ticks: { 
                 //     stepSize: 0.5,
                 //     color: '#dddddd',
@@ -279,7 +279,7 @@ const tractionChartConfig = {
                 min: -2,
                 max: 2,
                 position: 'center',
-                grid: { color: 'rgba(148, 163, 184, 0.1)' },
+                grid: { color: 'rgba(150, 150, 150, 0.3)' },
                 // ticks: { 
                 //     stepSize: 0.5,
                 //     color: '#dddddd', 

@@ -1,3 +1,181 @@
+const maxDataPoints = 200;
+
+const socData = {
+    labels: [],
+    datasets: [
+        { 
+            label: 'SOC (%)', 
+            data: [], 
+            borderColor: '#2da6d9', 
+            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+            borderWidth: 3,
+            tension: 0.1,
+            pointRadius: 0,
+            hoverRadius: 0,
+            hidden: false 
+        }
+    ]
+};
+
+const totalVoltageData = {
+    labels: [],
+    datasets: [
+        { 
+            label: 'Total Voltage (V)', 
+            data: [], 
+            borderColor: '#2da6d9', 
+            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+            borderWidth: 3,
+            tension: 0.1,
+            pointRadius: 0,
+            hoverRadius: 0,
+            hidden: false 
+        }
+    ]
+};
+
+const socChart = new Chart(document.getElementById('soc-chart'), {
+    type: 'line',
+    data: socData,
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: {
+            mode: 'index',
+            intersect: false,
+        },
+        scales: {
+            x: {
+                display: false,
+            },
+            y: {
+                display: true,
+                min: 0,
+                max: 100,
+                title: {
+                    display: false,
+                },
+                ticks: {
+                    stepSize: 20,
+                    color: '#dddddd'
+                },
+                grid: { 
+                    display: true,
+                    color: 'rgba(181, 181, 181, 0.3)',
+                    drawBorder: true,
+                    drawOnChartArea: true,
+                    drawTicks: true,
+                    lineWidth: 1
+                }
+            }
+        },
+        plugins: {
+            tooltip: {
+                enabled: true,
+                backgroundColor: 'rgba(24, 24, 27, 0.9)', 
+                borderColor: 'rgba(63, 63, 70, 0.6)',     
+                borderWidth: 1,                        
+                cornerRadius: 8,                       
+                padding: 12,                           
+                titleColor: '#f4f4f5',                 
+                bodyColor: '#d4d4d8',                  
+                
+                callbacks: {
+                    labelColor: function(context) {
+                        // Get the main line color of this dataset (FL, FR, etc.)
+                        const datasetColor = context.dataset.borderColor;
+                        
+                        return {
+                            // Force both the border AND the fill of the tooltip box 
+                            // to use the dataset's main line color (eliminating the white fill)
+                            borderColor: datasetColor,
+                            backgroundColor: datasetColor,
+                            borderWidth: 1,
+                            borderRadius: 0 // Slightly rounded corners for the mini boxes
+                        };
+                    }
+                }
+            },
+            legend: { display: false, },
+            annotation: {
+                annotations: {}
+            }
+        }
+    }
+});
+
+const totalVoltageChart = new Chart(document.getElementById('total-voltage-chart'), {
+    type: 'line',
+    data: totalVoltageData,
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: {
+            mode: 'index',
+            intersect: false,
+        },
+        scales: {
+            x: {
+                display: false,
+            },
+            y: {
+                display: true,
+                min: 0,
+                max: 500,
+                title: {
+                    display: false,
+                },
+                ticks: {
+                    stepSize: 100,
+                    color: '#dddddd'
+                },
+                grid: { 
+                    display: true,
+                    color: 'rgba(181, 181, 181, 0.3)',
+                    drawBorder: true,
+                    drawOnChartArea: true,
+                    drawTicks: true,
+                    lineWidth: 1
+                }
+            }
+        },
+        plugins: {
+            tooltip: {
+                enabled: true,
+                backgroundColor: 'rgba(24, 24, 27, 0.9)', 
+                borderColor: 'rgba(63, 63, 70, 0.6)',     
+                borderWidth: 1,                        
+                cornerRadius: 8,                       
+                padding: 12,                           
+                titleColor: '#f4f4f5',                 
+                bodyColor: '#d4d4d8',                  
+                
+                callbacks: {
+                    labelColor: function(context) {
+                        // Get the main line color of this dataset (FL, FR, etc.)
+                        const datasetColor = context.dataset.borderColor;
+                        
+                        return {
+                            // Force both the border AND the fill of the tooltip box 
+                            // to use the dataset's main line color (eliminating the white fill)
+                            borderColor: datasetColor,
+                            backgroundColor: datasetColor,
+                            borderWidth: 1,
+                            borderRadius: 0 // Slightly rounded corners for the mini boxes
+                        };
+                    }
+                }
+            },
+            legend: { display: false, },
+            annotation: {
+                annotations: {}
+            }
+        }
+    }
+});
+
 // Scroll to specific segment
 function scrollToSegment(type, segmentIndex) {
     // First expand the section if collapsed
@@ -227,6 +405,22 @@ function updateDisplay(data) {
     // Update SOC
     if (acc.soc !== null && acc.soc !== undefined) {
         document.getElementById('acc-soc').textContent = acc.soc.toFixed(1) + '%';
+
+        if (acc.soc != 0) {
+            // Update SOC chart
+            const timestamp = new Date().toLocaleTimeString('en-US');
+            socData.labels.push(timestamp);
+            socData.datasets[0].data.push(acc.soc);
+
+            document.getElementById('soc-last-update').textContent = timestamp;
+
+            if (socData.labels.length > maxDataPoints) {
+                socData.labels.shift();             // Remove oldest X-axis point
+                socData.datasets[0].data.shift();   // Remove oldest SOC data point
+            }
+
+            socChart.update();
+        }
     }
 
     // Update Current
@@ -304,6 +498,22 @@ function updateDisplay(data) {
                 minVoltageEl.style.color = '#eab308';
             } else {
                 minVoltageEl.style.color = '#ffffff';
+            }
+
+            if (totalVoltage != 0) {
+                // Update total voltage chart
+                const timestamp = new Date().toLocaleTimeString('en-US');
+                totalVoltageData.labels.push(timestamp);
+                totalVoltageData.datasets[0].data.push(totalVoltage);
+
+                document.getElementById('total-voltage-last-update').textContent = timestamp;
+
+                if (totalVoltageData.labels.length > maxDataPoints) {
+                    totalVoltageData.labels.shift();             // Remove oldest X-axis point
+                    totalVoltageData.datasets[0].data.shift();   // Remove oldest total voltage data point
+                }
+
+                totalVoltageChart.update();
             }
         }
     }

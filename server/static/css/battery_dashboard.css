@@ -278,3 +278,8 @@ body {
 #segment-overview-table .temp-cell:hover {
     background: rgba(50, 50, 50, 0.6);
 }
+
+.chart-container-small {
+    position: relative;
+    height: 220px;
+}
