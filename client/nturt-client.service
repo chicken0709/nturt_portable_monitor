@@ -4,9 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/Desktop/RPI_Desktop/nturacing_remote_monitor/client
-ExecStart=/usr/bin/python3 /home/pi/Desktop/RPI_Desktop/nturacing_remote_monitor/client/client_vehicle.py
+User=nturt
+WorkingDirectory=/home/nturt/Desktop/nturacing_remote_monitor/client/
+ExecStart=/usr/bin/python3 /home/nturt/Desktop/nturacing_remote_monitor/client/client_vehicle.py
 Restart=always
 RestartSec=10
 StandardOutput=journal
