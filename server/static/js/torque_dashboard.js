@@ -5,15 +5,79 @@ const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
 // Chart data storage - keep only 20 seconds of data (assuming ~10 updates per second = 200 data points)
 const maxDataPoints = 200; // 20 seconds at 10 Hz
 
+const canvas = document.getElementById('radial-gauge');
+const container = canvas.parentElement;
+const speedGaugeSize = container.clientWidth;
+
+const speedGauge = new RadialGauge({
+    renderTo: 'radial-gauge',
+    width: speedGaugeSize * 0.9,
+    height: speedGaugeSize * 0.9,
+    units: 'km/h',
+    minValue: 0,
+    maxValue: 100,
+    majorTicks: ['0', '10', '20', '30', '40', '50', '60', '70', '80', '90', '100'],
+    highlights: [],
+    valueInt : 1,
+    valueDec : 0,
+    colorMajorTicks: "#ddd",
+    colorMinorTicks: "#ddd",
+    colorTitle: "#eee",
+    colorUnits: "#ccc",
+    colorNumbers: "#eee",
+    colorPlate: "#222",
+    colorNeedle: '#62aae1',
+    colorNeedleEnd: '#62aae1',
+    colorValueBoxRect: 'rgb(72, 72, 72)',
+    colorValueBoxRectEnd: 'rgb(72, 72, 72)',
+    colorValueBoxBackground: 'rgb(101, 101, 101)',
+    colorValueText: '#eee',
+    animation: false
+}).draw();
+
+const throttleData = {
+    labels: [],
+    datasets: [
+        { 
+            label: 'Throttle', 
+            data: [], 
+            borderColor: '#21c05b', 
+            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+            borderWidth: 3,
+            tension: 0.1,
+            pointRadius: 0,
+            hoverRadius: 0,
+            hidden: false 
+        }
+    ]
+};
+
+const brakeData = {
+    labels: [],
+    datasets: [
+        { 
+            label: 'Brake', 
+            data: [], 
+            borderColor: '#ed1212', 
+            backgroundColor: 'rgba(221, 32, 32, 0.1)',
+            borderWidth: 3,
+            tension: 0.1,
+            pointRadius: 0,
+            hoverRadius: 0,
+            hidden: false 
+        }
+    ]
+};
+
 const torqueDataFront = {
     labels: [],
     datasets: [
         { 
             label: 'FL', 
             data: [], 
-            borderColor: '#eab308', 
-            backgroundColor: 'rgba(234, 179, 8, 0.1)',
-            borderWidth: 2,
+            borderColor: '#2da6d9', 
+            backgroundColor: 'rgba(24, 24, 27, 0.4)',
+            borderWidth: 2.5,
             tension: 0.1,
             pointRadius: 0,
             hidden: false 
@@ -21,9 +85,9 @@ const torqueDataFront = {
         { 
             label: 'FR', 
             data: [], 
-            borderColor: '#ef4444', 
-            backgroundColor: 'rgba(239, 68, 68, 0.1)',
-            borderWidth: 2,
+            borderColor: '#cccccc', 
+            backgroundColor: 'rgba(24, 24, 27, 0.4)',
+            borderWidth: 2.5,
             tension: 0.1,
             pointRadius: 0,
             hidden: false 
@@ -31,9 +95,9 @@ const torqueDataFront = {
         { 
             label: 'FL(FB)', 
             data: [], 
-            borderColor: '#3b82f6', 
-            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-            borderWidth: 2,
+            borderColor: '#059669', 
+            backgroundColor: 'rgba(24, 24, 27, 0.4)',
+            borderWidth: 2.5,
             tension: 0.1,
             pointRadius: 0,
             hidden: false 
@@ -41,9 +105,9 @@ const torqueDataFront = {
         { 
             label: 'FR(FB)', 
             data: [], 
-            borderColor: '#22c55e', 
-            backgroundColor: 'rgba(34, 197, 94, 0.1)',
-            borderWidth: 2,
+            borderColor: '#fbbf24', 
+            backgroundColor: 'rgba(24, 24, 27, 0.4)',
+            borderWidth: 2.5,
             tension: 0.1,
             pointRadius: 0,
             hidden: false 
@@ -51,15 +115,15 @@ const torqueDataFront = {
     ]
 };
 
-const torqueData = {
+const torqueDataRear = {
     labels: [],
     datasets: [
         { 
             label: 'RL', 
             data: [], 
-            borderColor: '#eab308', 
-            backgroundColor: 'rgba(234, 179, 8, 0.1)',
-            borderWidth: 2,
+            borderColor: '#2da6d9', 
+            backgroundColor: 'rgba(24, 24, 27, 0.4)',
+            borderWidth: 2.5,
             tension: 0.1,
             pointRadius: 0,
             hidden: false 
@@ -67,9 +131,9 @@ const torqueData = {
         { 
             label: 'RR', 
             data: [], 
-            borderColor: '#ef4444', 
-            backgroundColor: 'rgba(239, 68, 68, 0.1)',
-            borderWidth: 2,
+            borderColor: '#cccccc', 
+            backgroundColor: 'rgba(24, 24, 27, 0.4)',
+            borderWidth: 2.5,
             tension: 0.1,
             pointRadius: 0,
             hidden: false 
@@ -77,9 +141,9 @@ const torqueData = {
         { 
             label: 'RL(FB)', 
             data: [], 
-            borderColor: '#3b82f6', 
-            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-            borderWidth: 2,
+            borderColor: '#059669', 
+            backgroundColor: 'rgba(24, 24, 27, 0.4)',
+            borderWidth: 2.5,
             tension: 0.1,
             pointRadius: 0,
             hidden: false 
@@ -87,9 +151,9 @@ const torqueData = {
         { 
             label: 'RR(FB)', 
             data: [], 
-            borderColor: '#22c55e', 
-            backgroundColor: 'rgba(34, 197, 94, 0.1)',
-            borderWidth: 2,
+            borderColor: '#fbbf24', 
+            backgroundColor: 'rgba(24, 24, 27, 0.4)',
+            borderWidth: 2.5,
             tension: 0.1,
             pointRadius: 0,
             hidden: false 
@@ -103,9 +167,9 @@ const rpmData = {
         { 
             label: 'FL', 
             data: [], 
-            borderColor: '#22c55e', 
-            backgroundColor: 'rgba(34, 197, 94, 0.1)',
-            borderWidth: 2,
+            borderColor: '#2da6d9', 
+            backgroundColor: 'rgba(24, 24, 27, 0.4)',
+            borderWidth: 2.5,
             tension: 0.1,
             pointRadius: 0,
             hidden: false 
@@ -113,9 +177,9 @@ const rpmData = {
         { 
             label: 'FR', 
             data: [], 
-            borderColor: '#3b82f6', 
-            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-            borderWidth: 2,
+            borderColor: '#cccccc', 
+            backgroundColor: 'rgba(24, 24, 27, 0.4)',
+            borderWidth: 2.5,
             tension: 0.1,
             pointRadius: 0,
             hidden: false 
@@ -123,9 +187,9 @@ const rpmData = {
         { 
             label: 'RL', 
             data: [], 
-            borderColor: '#eab308', 
-            backgroundColor: 'rgba(234, 179, 8, 0.1)',
-            borderWidth: 2,
+            borderColor: '#059669', 
+            backgroundColor: 'rgba(24, 24, 27, 0.4)',
+            borderWidth: 2.5,
             tension: 0.1,
             pointRadius: 0,
             hidden: false 
@@ -133,9 +197,9 @@ const rpmData = {
         { 
             label: 'RR', 
             data: [], 
-            borderColor: '#ef4444', 
-            backgroundColor: 'rgba(239, 68, 68, 0.1)',
-            borderWidth: 2,
+            borderColor: '#fbbf24', 
+            backgroundColor: 'rgba(24, 24, 27, 0.4)',
+            borderWidth: 2.5,
             tension: 0.1,
             pointRadius: 0,
             hidden: false 
@@ -147,6 +211,98 @@ const rpmData = {
 const errorMarkers = [];
 
 // Initialize charts
+const throttleChart = new Chart(document.getElementById('throttle-chart'), {
+    type: 'line',
+    data: throttleData,
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: {
+            mode: 'index',
+            intersect: false,
+        },
+        scales: {
+            x: {
+                display: false,
+            },
+            y: {
+                display: true,
+                min: 0,
+                max: 100,
+                title: {
+                    display: false,
+                },
+                ticks: {
+                    stepSize: 20,
+                    color: '#dddddd'
+                },
+                grid: { 
+                    display: true,
+                    color: 'rgba(148, 163, 184, 0.1)',
+                    drawBorder: true,
+                    drawOnChartArea: true,
+                    drawTicks: true,
+                    lineWidth: 1
+                }
+            }
+        },
+        plugins: {
+            tooltip: { enabled: false, },
+            legend: { display: false, },
+            annotation: {
+                annotations: {}
+            }
+        }
+    }
+});
+
+const brakeChart = new Chart(document.getElementById('brake-chart'), {
+    type: 'line',
+    data: brakeData,
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: {
+            mode: 'index',
+            intersect: false,
+        },
+        scales: {
+            x: {
+                display: false,
+            },
+            y: {
+                display: true,
+                min: 0,
+                max: 100,
+                title: {
+                    display: false,
+                },
+                ticks: {
+                    stepSize: 20,
+                    color: '#dddddd'
+                },
+                grid: { 
+                    display: true,
+                    color: 'rgba(148, 163, 184, 0.1)',
+                    drawBorder: true,
+                    drawOnChartArea: true,
+                    drawTicks: true,
+                    lineWidth: 1
+                }
+            }
+        },
+        plugins: {
+            tooltip: { enabled: false, },
+            legend: { display: false, },
+            annotation: {
+                annotations: {}
+            }
+        }
+    }
+});
+
 const torqueChartFront = new Chart(document.getElementById('torque-chart-front'), {
     type: 'line',
     data: torqueDataFront,
@@ -166,14 +322,15 @@ const torqueChartFront = new Chart(document.getElementById('torque-chart-front')
                 },
                 grid: { 
                     display: true,
-                    color: 'rgba(148, 163, 184, 0.3)',
+                    color: 'rgba(148, 163, 184, 0.1)',
                     drawBorder: true,
                     drawOnChartArea: true,
                     drawTicks: true,
                     lineWidth: 1
                 },
                 ticks: { 
-                    color: '#e2e8f0',
+                    display: true,
+                    color: '#808080',
                     maxRotation: 45,
                     minRotation: 45,
                     autoSkip: true,
@@ -194,16 +351,16 @@ const torqueChartFront = new Chart(document.getElementById('torque-chart-front')
                 title: {
                     display: true,
                     text: 'Torque (Nm)',
-                    color: '#94a3b8',
+                    color: '#dddddd',
                     font: { size: 12 }
                 },
                 ticks: {
                     stepSize: 5,
-                    color: '#94a3b8'
+                    color: '#dddddd'
                 },
                 grid: { 
                     display: true,
-                    color: 'rgba(148, 163, 184, 0.3)',
+                    color: 'rgba(148, 163, 184, 0.1)',
                     drawBorder: true,
                     drawOnChartArea: true,
                     drawTicks: true,
@@ -212,12 +369,34 @@ const torqueChartFront = new Chart(document.getElementById('torque-chart-front')
             }
         },
         plugins: {
+            tooltip: {
+                enabled: true,
+                padding: 12,                           
+                titleColor: '#f4f4f5',                 
+                bodyColor: '#d4d4d8',                  
+                
+                callbacks: {
+                    labelColor: function(context) {
+                        // Get the main line color of this dataset (FL, FR, etc.)
+                        const datasetColor = context.dataset.borderColor;
+                        
+                        return {
+                            // Force both the border AND the fill of the tooltip box 
+                            // to use the dataset's main line color (eliminating the white fill)
+                            borderColor: datasetColor,
+                            backgroundColor: datasetColor,
+                            borderWidth: 1,
+                            borderRadius: 0 // rounded corners for the mini boxes
+                        };
+                    }
+                }
+            },
             legend: { 
                 display: true,
                 position: 'top',
                 align: 'center',
                 labels: {
-                    color: '#ffffff',
+                    color: '#dddddd',
                     usePointStyle: true,
                     pointStyle: 'rect',
                     boxWidth: 20,
@@ -243,9 +422,9 @@ const torqueChartFront = new Chart(document.getElementById('torque-chart-front')
     }
 });
 
-const torqueChart = new Chart(document.getElementById('torque-chart'), {
+const torqueChartRear = new Chart(document.getElementById('torque-chart-rear'), {
     type: 'line',
-    data: torqueData,
+    data: torqueDataRear,
     options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -262,14 +441,15 @@ const torqueChart = new Chart(document.getElementById('torque-chart'), {
                 },
                 grid: { 
                     display: true,
-                    color: 'rgba(148, 163, 184, 0.3)',
+                    color: 'rgba(148, 163, 184, 0.1)',
                     drawBorder: true,
                     drawOnChartArea: true,
                     drawTicks: true,
                     lineWidth: 1
                 },
                 ticks: { 
-                    color: '#e2e8f0',
+                    display: true,
+                    color: '#808080',
                     maxRotation: 45,
                     minRotation: 45,
                     autoSkip: true,
@@ -290,16 +470,16 @@ const torqueChart = new Chart(document.getElementById('torque-chart'), {
                 title: {
                     display: true,
                     text: 'Torque (Nm)',
-                    color: '#94a3b8',
+                    color: '#dddddd',
                     font: { size: 12 }
                 },
                 ticks: {
                     stepSize: 5,
-                    color: '#94a3b8'
+                    color: '#dddddd'
                 },
                 grid: { 
                     display: true,
-                    color: 'rgba(148, 163, 184, 0.3)',
+                    color: 'rgba(148, 163, 184, 0.1)',
                     drawBorder: true,
                     drawOnChartArea: true,
                     drawTicks: true,
@@ -308,12 +488,34 @@ const torqueChart = new Chart(document.getElementById('torque-chart'), {
             }
         },
         plugins: {
+            tooltip: {
+                enabled: true,
+                padding: 12,                           
+                titleColor: '#f4f4f5',                 
+                bodyColor: '#d4d4d8',                  
+                
+                callbacks: {
+                    labelColor: function(context) {
+                        // Get the main line color of this dataset (FL, FR, etc.)
+                        const datasetColor = context.dataset.borderColor;
+                        
+                        return {
+                            // Force both the border AND the fill of the tooltip box 
+                            // to use the dataset's main line color (eliminating the white fill)
+                            borderColor: datasetColor,
+                            backgroundColor: datasetColor,
+                            borderWidth: 1,
+                            borderRadius: 0 // rounded corners for the mini boxes
+                        };
+                    }
+                }
+            },
             legend: { 
                 display: true,
                 position: 'top',
                 align: 'center',
                 labels: {
-                    color: '#ffffff',
+                    color: '#dddddd',
                     usePointStyle: true,
                     pointStyle: 'rect',
                     boxWidth: 20,
@@ -365,7 +567,8 @@ const rpmChart = new Chart(document.getElementById('rpm-chart'), {
                     lineWidth: 1
                 },
                 ticks: { 
-                    color: '#e2e8f0',
+                    display: true,
+                    color: '#808080',
                     maxRotation: 45,
                     minRotation: 45,
                     autoSkip: true,
@@ -382,20 +585,20 @@ const rpmChart = new Chart(document.getElementById('rpm-chart'), {
             y: {
                 display: true,
                 min: 0,
-                max: 16000,
+                max: 12000,
                 title: {
                     display: true,
                     text: 'RPM',
-                    color: '#94a3b8',
+                    color: '#dddddd',
                     font: { size: 12 }
                 },
                 ticks: {
                     stepSize: 2000,
-                    color: '#94a3b8'
+                    color: '#dddddd'
                 },
                 grid: { 
                     display: true,
-                    color: 'rgba(148, 163, 184, 0.3)',
+                    color: 'rgba(148, 163, 184, 0.1)',
                     drawBorder: true,
                     drawOnChartArea: true,
                     drawTicks: true,
@@ -404,6 +607,32 @@ const rpmChart = new Chart(document.getElementById('rpm-chart'), {
             }
         },
         plugins: {
+            tooltip: {
+                enabled: true,
+                backgroundColor: 'rgba(24, 24, 27, 0.9)', 
+                borderColor: 'rgba(63, 63, 70, 0.6)',     
+                borderWidth: 1,                        
+                cornerRadius: 8,                       
+                padding: 12,                           
+                titleColor: '#f4f4f5',                 
+                bodyColor: '#d4d4d8',                  
+                
+                callbacks: {
+                    labelColor: function(context) {
+                        // Get the main line color of this dataset (FL, FR, etc.)
+                        const datasetColor = context.dataset.borderColor;
+                        
+                        return {
+                            // Force both the border AND the fill of the tooltip box 
+                            // to use the dataset's main line color (eliminating the white fill)
+                            borderColor: datasetColor,
+                            backgroundColor: datasetColor,
+                            borderWidth: 1,
+                            borderRadius: 0 // Slightly rounded corners for the mini boxes
+                        };
+                    }
+                }
+            },
             legend: { 
                 display: true,
                 position: 'top',
@@ -451,15 +680,17 @@ ws.onclose = () => {
 ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
     
-    // 更新车辆连接状态
+    // update vehicle connection status
     if (data.vehicle_connected !== undefined) {
         if (data.vehicle_connected) {
             document.getElementById('connection-status').className = 'connection-indicator connected';
             document.getElementById('connection-text').textContent = 'Connected';
+            document.getElementById('connection-text').style.color = '#10b981'; // emerald-500
             document.querySelector('.status-dot').className = 'status-dot green';
         } else {
             document.getElementById('connection-status').className = 'connection-indicator disconnected';
             document.getElementById('connection-text').textContent = 'Disconnected';
+            document.getElementById('connection-text').style.color = '#ef4444'; // rose-500
             document.querySelector('.status-dot').className = 'status-dot red';
         }
     }
@@ -523,31 +754,74 @@ function updateDisplay(data) {
     }
     document.getElementById('floating-message-count').textContent = messageCount;
     
-    if (data.update_time) {
-        const time = new Date(data.update_time);
-        const timeStr = time.toLocaleTimeString();
-        const lastUpdateEl = document.getElementById('last-update');
-        if (lastUpdateEl) {
-            lastUpdateEl.textContent = timeStr;
+    // Update top bar controls
+    // if (data.velocity && data.velocity.speed_kmh !== null) {
+    //     const speed = Math.round(data.velocity.speed_kmh);
+    //     // document.getElementById('speed-value').textContent = speed;
+    //     speedGauge.value = speed;
+    //     console.log(`Speed updated: ${speed} km/h`);
+    // }
+
+    // Update speed gauge
+    let incomingSpeed = null;
+    let totalRPM = 0;
+    let motorCount = 0;
+
+    // Calculate average RPM from all motors and convert to km/h
+    if (data.inverters) {
+        Object.values(data.inverters).forEach(motor => {
+            if (motor.speed !== null && motor.speed !== undefined) {
+                totalRPM += Math.abs(motor.speed);
+                motorCount++;
+            }
+        });
+        
+        if (motorCount > 0) {
+            const avgRPM = totalRPM / motorCount;
+            incomingSpeed = avgRPM * 0.00709; // RPM to km/h conversion
         }
-        document.getElementById('floating-last-update').textContent = timeStr;
     }
 
-    // Update top bar controls
-    if (data.velocity && data.velocity.speed_kmh !== null) {
-        const speed = Math.round(data.velocity.speed_kmh);
-        document.getElementById('speed-value').textContent = speed;
+    // Fallback to velocity data if inverter data wasn't found or was empty
+    if ((incomingSpeed === null || incomingSpeed === 0) && data.velocity && data.velocity.speed_kmh !== null && data.velocity.speed_kmh !== undefined) {
+        incomingSpeed = Math.abs(data.velocity.speed_kmh);
+    }
+
+    // Only update the gauge if we successfully calculated/found a valid speed metric.
+    if (incomingSpeed !== null) {
+        speedGauge.value = incomingSpeed;
     }
 
     if (data.vcu) {
         const appsPercent = data.vcu.accel || 0;
         const brakePercent = data.vcu.brake || 0;
+
+        // 1. CRITICAL FIX: Push an empty string (or a timestamp) to the labels array
+        // to give Chart.js an anchor point on the X-Axis.
+        const timestamp = new Date().toLocaleTimeString(); // Or just use '' if you want it blank
+        throttleData.labels.push(timestamp);
+        throttleData.datasets[0].data.push(appsPercent);
+        brakeData.labels.push(timestamp);
+        brakeData.datasets[0].data.push(brakePercent);
+        
+        // 2. PERFORMANCE SAFEGUARD: Cap the maximum number of live telemetry points
+        if (throttleData.labels.length > maxDataPoints) {
+            throttleData.labels.shift();             // Remove oldest X-axis point
+            throttleData.datasets[0].data.shift();   // Remove oldest Throttle data point
+        }
+        if (brakeData.labels.length > maxDataPoints) {
+            brakeData.labels.shift();              // Remove oldest X-axis point
+            brakeData.datasets[0].data.shift();    // Remove oldest Brake data point
+        }
         
         document.getElementById('apps-value').textContent = appsPercent + '%';
         document.getElementById('apps-fill').style.height = appsPercent + '%';
         
         document.getElementById('brake-value').textContent = brakePercent + '%';
         document.getElementById('brake-fill').style.height = brakePercent + '%';
+
+        throttleChart.update();
+        brakeChart.update();
     }
 
     if (data.distance) {
@@ -557,25 +831,41 @@ function updateDisplay(data) {
 
     // Update motor RPMs
     if (data.inverters) {
-        const rl_rpm = Math.abs(data.inverters[3]?.speed || 0);  // Take absolute value
-        const rr_rpm = data.inverters[4]?.speed || 0;
+        const motorIds = ['fl', 'fr', 'rl', 'rr'];
+        const motorMap = {
+            'fl': 1, 'fr': 2, 'rl': 3, 'rr': 4
+        };
         
-        document.getElementById('rpm-rl-value').textContent = Math.round(rl_rpm);
-        document.getElementById('rpm-rr-value').textContent = Math.round(rr_rpm);
-        
-        // Update RPM gauge fill (0-16000 RPM maps to 0-360 degrees)
-        const rl_fill = Math.min((rl_rpm / 16000) * 360, 360);
-        const rr_fill = Math.min((rr_rpm / 16000) * 360, 360);
-        
-        document.getElementById('rpm-rl-gauge').style.setProperty('--rpm-fill', `${rl_fill}deg`);
-        document.getElementById('rpm-rr-gauge').style.setProperty('--rpm-fill', `${rr_fill}deg`);
-        
-        // Calculate speed from RPM (formula from original code)
-        const rl_speed = Math.round(Math.abs(rl_rpm * 20 * 2.54 * 3.14 * 60 / 1350000) * 100) / 100;
-        const rr_speed = Math.round(rr_rpm * 20 * 2.54 * 3.14 * 60 / 1350000 * 100) / 100;
-        
-        document.getElementById('speed-rl-value').textContent = rl_speed + ' km/h';
-        document.getElementById('speed-rr-value').textContent = rr_speed + ' km/h';
+        motorIds.forEach(motorId => {
+            const motorNum = motorMap[motorId];
+            const motor = data.inverters[motorNum];
+            
+            const valueElement = document.getElementById(`rpm-${motorId}-value`);
+            const gaugeElement = document.getElementById(`rpm-${motorId}-gauge`);
+            const speedElement = document.getElementById(`speed-${motorId}-value`);
+            if (motor && motor.speed !== null && motor.speed !== undefined) {
+                const rpm = Math.abs(motor.speed);
+                
+                if (valueElement) {
+                    valueElement.textContent = Math.round(rpm);
+                }
+                const speedElement = document.getElementById(`speed-${motorId}-value`);
+                if (speedElement) {
+                    const speed = rpm * 0.00709; // RPM轉換為km/h
+                    speedElement.textContent = `${speed.toFixed(1)} km/h`;
+                }
+                
+                if (gaugeElement) {
+                    const maxRPM = 8000;
+                    const angle = Math.min(360, (rpm / maxRPM) * 360);
+                    gaugeElement.style.setProperty('--gauge-angle', `${angle}deg`);
+                }
+            } else {
+                if (valueElement) valueElement.textContent = '0';
+                if (speedElement) speedElement.textContent = '0 km/h'; // 新增
+                if (gaugeElement) gaugeElement.style.setProperty('--gauge-angle', '0deg');
+            }
+        });
 
         // Update charts
         updateCharts(data);
@@ -615,14 +905,14 @@ function updateCharts(data) {
         });
     }
 
-    if (torqueData.labels.length >= maxDataPoints) {
-        torqueData.labels.shift();
+    if (torqueDataRear.labels.length >= maxDataPoints) {
+        torqueDataRear.labels.shift();
         rpmData.labels.shift();
-        torqueData.datasets.forEach(ds => ds.data.shift());
+        torqueDataRear.datasets.forEach(ds => ds.data.shift());
         rpmData.datasets.forEach(ds => ds.data.shift());
         
         // Shift all error marker positions as data scrolls left
-        const annotations = torqueChart.options.plugins.annotation.annotations;
+        const annotations = torqueChartRear.options.plugins.annotation.annotations;
         Object.keys(annotations).forEach(key => {
             if (annotations[key].xMin > 0) {
                 annotations[key].xMin--;
@@ -635,7 +925,7 @@ function updateCharts(data) {
     }
 
     torqueDataFront.labels.push(timestamp);
-    torqueData.labels.push(timestamp);
+    torqueDataRear.labels.push(timestamp);
     rpmData.labels.push(timestamp);
 
     // Update torque data: FL, FR, FL(FB), FR(FB)
@@ -656,7 +946,7 @@ function updateCharts(data) {
                     xMin: torqueDataFront.labels.length - 1,
                     xMax: torqueDataFront.labels.length - 1,
                     borderColor: '#ef4444',
-                    borderWidth: 3,
+                    borderWidth: 2.5,
                     label: {
                         display: true,
                         content: 'FL',
@@ -686,7 +976,7 @@ function updateCharts(data) {
                     xMin: torqueDataFront.labels.length - 1,
                     xMax: torqueDataFront.labels.length - 1,
                     borderColor: '#ef4444',
-                    borderWidth: 3,
+                    borderWidth: 2.5,
                     label: {
                         display: true,
                         content: 'FR',
@@ -707,20 +997,20 @@ function updateCharts(data) {
     const rr = data.inverters[4];  // RR motor
     
     if (rl) {
-        torqueData.datasets[0].data.push(rl.target_torque || 0);  // RL target
-        torqueData.datasets[2].data.push(rl.torque || 0);  // RL feedback
+        torqueDataRear.datasets[0].data.push(rl.target_torque || 0);  // RL target
+        torqueDataRear.datasets[2].data.push(rl.torque || 0);  // RL feedback
         
         // Check for RL error
         if (rl.status && Array.isArray(rl.status) && rl.status.length >= 2) {
             const errorCode = rl.status[1];
             if (errorCode !== 0x0000 && errorCode !== null) {
                 const markerId = `error-${Date.now()}-rl`;
-                torqueChart.options.plugins.annotation.annotations[markerId] = {
+                torqueChartRear.options.plugins.annotation.annotations[markerId] = {
                     type: 'line',
-                    xMin: torqueData.labels.length - 1,
-                    xMax: torqueData.labels.length - 1,
+                    xMin: torqueDataRear.labels.length - 1,
+                    xMax: torqueDataRear.labels.length - 1,
                     borderColor: '#ef4444',
-                    borderWidth: 3,
+                    borderWidth: 2.5,
                     label: {
                         display: true,
                         content: 'RL',
@@ -732,25 +1022,25 @@ function updateCharts(data) {
             }
         }
     } else {
-        torqueData.datasets[0].data.push(0);
-        torqueData.datasets[2].data.push(0);
+        torqueDataRear.datasets[0].data.push(0);
+        torqueDataRear.datasets[2].data.push(0);
     }
     
     if (rr) {
-        torqueData.datasets[1].data.push(rr.target_torque || 0);  // RR target
-        torqueData.datasets[3].data.push(rr.torque || 0);  // RR feedback
+        torqueDataRear.datasets[1].data.push(rr.target_torque || 0);  // RR target
+        torqueDataRear.datasets[3].data.push(rr.torque || 0);  // RR feedback
         
         // Check for RR error
         if (rr.status && Array.isArray(rr.status) && rr.status.length >= 2) {
             const errorCode = rr.status[1];
             if (errorCode !== 0x0000 && errorCode !== null) {
                 const markerId = `error-${Date.now()}-rr`;
-                torqueChart.options.plugins.annotation.annotations[markerId] = {
+                torqueChartRear.options.plugins.annotation.annotations[markerId] = {
                     type: 'line',
-                    xMin: torqueData.labels.length - 1,
-                    xMax: torqueData.labels.length - 1,
+                    xMin: torqueDataRear.labels.length - 1,
+                    xMax: torqueDataRear.labels.length - 1,
                     borderColor: '#ef4444',
-                    borderWidth: 3,
+                    borderWidth: 2.5,
                     label: {
                         display: true,
                         content: 'RR',
@@ -762,8 +1052,8 @@ function updateCharts(data) {
             }
         }
     } else {
-        torqueData.datasets[1].data.push(0);
-        torqueData.datasets[3].data.push(0);
+        torqueDataRear.datasets[1].data.push(0);
+        torqueDataRear.datasets[3].data.push(0);
     }
 
     // Update RPM data for all 4 motors (no error markers)
@@ -781,7 +1071,7 @@ function updateCharts(data) {
     }
 
     torqueChartFront.update();
-    torqueChart.update();
+    torqueChartRear.update();
     rpmChart.update();
 }
 

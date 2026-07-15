@@ -135,6 +135,7 @@ const chartConfig = {
         },
         scales: {
             x: {
+                display: false,
                 grid: {
                     color: 'rgba(148, 163, 184, 0.1)'
                 },

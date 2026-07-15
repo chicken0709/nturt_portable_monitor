@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NTURT Racing Dashboard v3</title>
+    <title>NTURT Torque Dashboard</title>
     <link rel="icon" href="/static/images/logo.png" type="image/png">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -12,165 +12,256 @@
     <link rel="stylesheet" href="/static/css/torque_dashboard.css">
 </head>
 <body>
-    <!-- 返回主頁按钮 -->
-    <a href="/" class="fixed top-5 left-5 z-50 px-4 py-2 rounded-lg flex items-center space-x-2 text-white font-medium shadow-lg transition-all hover:scale-105" style="backdrop-filter: blur(10px); background: linear-gradient(135deg, rgba(59, 130, 246, 0.9) 0%, rgba(37, 99, 235, 0.9) 100%);">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
-        </svg>
-        <span>Home</span>
-    </a>
-    <!-- Connection Status -->
-    <div id="connection-status" class="connection-indicator disconnected">
-        <span class="status-dot red"></span>
-        <span id="connection-text">Connecting...</span>
-    </div>
-
-    <!-- Floating Message Stats -->
-    <div class="floating-stats">
-        <div class="floating-stats-title">Messages</div>
-        <div class="floating-stats-value" id="floating-message-count">0</div>
-        <div class="floating-stats-time" id="floating-last-update">Waiting...</div>
-    </div>
-
-    <div class="container mx-auto px-3 py-3">
+    <div class="container mx-auto px-4 py-6">
         <!-- Header -->
-        <div class="glass-card rounded-lg p-3 mb-3">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-                        NTURT Racing Dashboard
-                    </h1>
-                    <p class="text-slate-400 text-sm">Real-time Telemetry System v3.0</p>
+        <div class="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 font-sans antialiased">
+            <div>
+                <h1 class="text-4xl font-bold text-white tracking-tight">
+                    NTURT <span class="text-sky-400">Torque Dashboard</span>
+                </h1>
+                <p class="text-zinc-500 mt-2 text-sm">Real-time Torque & RPM Monitoring</p>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-4 sm:gap-6 self-stretch sm:self-auto justify-between sm:justify-end">
+                
+                <div class="text-right sm:border-r sm:border-zinc-800 sm:pr-6">
+                    <span class="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">CAN Messages</span>
+                    <div class="flex items-baseline gap-2 justify-end mt-0.5">
+                        <span id="floating-message-count" class="text-xl font-mono font-bold text-sky-400">0</span>
+                    </div>
                 </div>
+
+                <div id="connection-status" class="flex items-center gap-2 bg-zinc-950 border border-zinc-800 px-3 py-2 rounded-lg text-xs font-mono">
+                    <span class="w-2 h-2 rounded-full bg-red-500 status-dot"></span>
+                    <span id="connection-text" class="text-zinc-400">Connecting...</span>
+                </div>
+
+                <a href="/" class="btn-nav text-xs tracking-wider flex items-center gap-2 px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-400 font-medium hover:text-white hover:border-zinc-700 transition-all">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                    </svg>
+                    Home
+                </a>
             </div>
         </div>
 
         <!-- Top Control Bar -->
-        <div class="glass-card rounded-lg p-4 mb-3 overflow-hidden">
-            <div class="flex flex-row flex-nowrap items-center justify-center gap-4 md:gap-8 lg:gap-12 w-full mx-auto max-w-5xl">
-                <!-- RL Motor RPM -->
-                <div class="flex flex-col items-center min-w-0">
-                    <div class="mini-gauge scale-75 sm:scale-90 lg:scale-100">
-                        <div class="mini-circular-gauge" id="rpm-rl-gauge">
-                            <div class="mini-gauge-inner">
-                                <div id="rpm-rl-value" class="text-base lg:text-lg font-bold text-green-400">0</div>
-                                <div class="text-[10px] text-slate-400 uppercase">RPM</div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <div class="glass-card rounded-xl p-6">
+                <div class="section-title mb-4">
+                    <svg class="w-6 h-6 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M 4.5 15 A 8 8 0 1 1 19.5 15" class="stroke-zinc-400" />
+                        <path d="M 12 13.5 L 17.5 8" class="stroke-zinc-400" />
+                        <circle cx="12" cy="13.5" r="1.5" class="fill-zinc-400 stroke-zinc-400" />
+                    </svg>
+
+                    <span class="text-xl font-bold text-zinc-400">Speed & RPM</span>
+                </div>
+
+                <!-- Main responsive grid container -->
+                <div class="card grid grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-12 items-center justify-items-center p-4 w-full mx-auto">
+                    
+                    <!-- Front Left -->
+                    <div class="text-center order-2 lg:col-start-1 lg:row-start-1">
+                        <div class="mini-gauge mx-auto">
+                            <div class="mini-circular-gauge" id="rpm-fl-gauge">
+                                <div class="mini-gauge-inner">
+                                    <div id="rpm-fl-value" class="text-lg font-bold text-slate-200">0</div>
+                                    <div class="text-xs text-slate-400">RPM</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-xs md:text-sm font-bold text-sky-400 mt-2">FL Motor</div>
+                        <div class="text-xs md:text-sm font-bold text-slate-200" id="speed-fl-value">0 km/h</div>
+                    </div>
+
+                    <!-- Front Right -->
+                    <div class="text-center order-3 lg:col-start-3 lg:row-start-1">
+                        <div class="mini-gauge mx-auto">
+                            <div class="mini-circular-gauge" id="rpm-fr-gauge">
+                                <div class="mini-gauge-inner">
+                                    <div id="rpm-fr-value" class="text-lg font-bold text-slate-200">0</div>
+                                    <div class="text-xs text-slate-400">RPM</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-xs md:text-sm font-bold text-sky-400 mt-2">FR Motor</div>
+                        <div class="text-xs md:text-sm font-bold text-slate-200" id="speed-fr-value">0 km/h</div>
+                    </div>
+
+                    <!-- Speed Gauge -->
+                    <div class="col-span-2 lg:col-span-1 lg:col-start-2 lg:row-span-2 flex flex-col items-center justify-center order-1 lg:order-3 my-4 lg:my-0">
+                        <div class="relative w-[250px] h-[250px] flex items-center justify-center">
+                            <canvas id="radial-gauge" class="mx-auto"></canvas>
+                        </div>
+                        <div class="mt-2 text-center">
+                            <div id="trip-distance-value" class="text-xs sm:text-sm lg:text-lg font-bold text-sky-400">
+                                0.00 km
                             </div>
                         </div>
                     </div>
-                    <div class="text-[10px] lg:text-sm font-bold text-cyan-400 mt-1 truncate">RL Motor</div>
-                    <div id="speed-rl-value" class="text-[10px] lg:text-sm font-bold text-cyan-400">0 km/h</div>
-                </div>
 
-                <!-- Brake Bar -->
-                <div class="flex flex-col items-center">
-                    <div class="vertical-bar brake-bar h-12 sm:h-20 md:h-24">
-                        <div class="bar-fill" id="brake-fill" style="height: 0%"></div>
-                    </div>
-                    <div class="mt-2 text-center">
-                        <div class="text-[9px] lg:text-xs font-bold text-red-400">BRAKE</div>
-                        <div id="brake-value" class="text-xs lg:text-lg font-mono text-red-300">0%</div>
-                    </div>
-                </div>
-
-                <!-- Speed Gauge -->
-                <div class="flex flex-col items-center min-w-0 px-2">
-                    <div class="speed-gauge scale-75 sm:scale-90 lg:scale-110">
-                        <div class="circular-gauge" id="speed-gauge">
-                            <div class="gauge-inner">
-                                <div id="speed-value" class="text-2xl sm:text-3xl lg:text-5xl font-bold text-white">0</div>
-                                <div class="text-[10px] sm:text-xs text-slate-400">km/h</div>
+                    <!-- Rear Left -->
+                    <div class="text-center order-4 lg:col-start-1 lg:row-start-2">
+                        <div class="mini-gauge mx-auto">
+                            <div class="mini-circular-gauge" id="rpm-rl-gauge">
+                                <div class="mini-gauge-inner">
+                                    <div id="rpm-rl-value" class="text-lg font-bold text-slate-200">0</div>
+                                    <div class="text-xs text-slate-400">RPM</div>
+                                </div>
                             </div>
                         </div>
+                        <div class="text-xs md:text-sm font-bold text-sky-400 mt-2">RL Motor</div>
+                        <div class="text-xs md:text-sm font-bold text-slate-200" id="speed-rl-value">0 km/h</div>
                     </div>
-                    <div class="mt-2 text-center">
-                        <div id="trip-distance-value" class="text-xs sm:text-sm lg:text-lg font-bold text-cyan-400">
-                            0.00 km
-                        </div>
-                    </div>
-                </div>
 
-                <!-- APPS Bar -->
-                <div class="flex flex-col items-center">
-                    <div class="vertical-bar apps-bar h-12 sm:h-20 md:h-24">
-                        <div class="bar-fill" id="apps-fill" style="height: 0%"></div>
-                    </div>
-                    <div class="mt-2 text-center">
-                        <div class="text-[9px] lg:text-xs font-bold text-green-400">APPS</div>
-                        <div id="apps-value" class="text-xs lg:text-lg font-mono text-green-300">0%</div>
-                    </div>
-                </div>
-
-                <!-- RR Motor RPM -->
-                <div class="flex flex-col items-center min-w-0">
-                    <div class="mini-gauge scale-75 sm:scale-90 lg:scale-100">
-                        <div class="mini-circular-gauge" id="rpm-rr-gauge">
-                            <div class="mini-gauge-inner">
-                                <div id="rpm-rr-value" class="text-base lg:text-lg font-bold text-green-400">0</div>
-                                <div class="text-[10px] text-slate-400 uppercase">RPM</div>
+                    <!-- Rear Right -->
+                    <div class="text-center order-5 lg:col-start-3 lg:row-start-2">
+                        <div class="mini-gauge mx-auto">
+                            <div class="mini-circular-gauge" id="rpm-rr-gauge">
+                                <div class="mini-gauge-inner">
+                                    <div id="rpm-rr-value" class="text-lg font-bold text-slate-200">0</div>
+                                    <div class="text-xs text-slate-400">RPM</div>
+                                </div>
                             </div>
                         </div>
+                        <div class="text-xs md:text-sm font-bold text-sky-400 mt-2">RR Motor</div>
+                        <div class="text-xs md:text-sm font-bold text-slate-200" id="speed-rr-value">0 km/h</div>
                     </div>
-                    <div class="text-[10px] lg:text-sm font-bold text-cyan-400 mt-1 truncate">RR Motor</div>
-                    <div id="speed-rr-value" class="text-[10px] lg:text-sm font-bold text-cyan-400">0 km/h</div>
+
+                </div>
+            </div>
+
+            <div class="lg:col-span-1 glass-card rounded-xl p-6 flex flex-col gap-6">
+                <div class="section-title mb-4">
+                    <svg class="w-6 h-6 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M 3 12 l 3 0 l 3 -7 l 4 14 l 4 -11 l 4 4" class="stroke-zinc-400" />
+                    </svg>
+
+                    <span class="text-xl font-bold text-zinc-400">Throttle & Brake Trace</span>
                 </div>
 
+                <div class="flex flex-row items-center gap-4 w-full h-full">
+                    <div class="flex flex-col items-center shrink-0 w-16 h-full">
+                        <div class="vertical-bar apps-bar h-full">
+                            <div class="bar-fill" id="apps-fill" style="height: 0%"></div>
+                        </div>
+                        <div class="mt-2 text-center">
+                            <div class="text-[9px] lg:text-xs font-bold text-green-500">APPS</div>
+                            <div id="apps-value" class="text-xs lg:text-lg font-mono text-green-500">0%</div>
+                        </div>
+                    </div>
+                    
+                    <div class="chart-container-small flex-1 min-w-0">
+                        <canvas id="throttle-chart"></canvas>
+                    </div>
+                </div>
+
+                <div class="flex flex-row items-center gap-4 w-full h-full">
+                    <div class="flex flex-col items-center shrink-0 w-16 h-full">
+                        <div class="vertical-bar brake-bar h-full">
+                            <div class="bar-fill" id="brake-fill" style="height: 0%"></div>
+                        </div>
+                        <div class="mt-2 text-center">
+                            <div class="text-[9px] lg:text-xs font-bold text-red-600">BRAKE</div>
+                            <div id="brake-value" class="text-xs lg:text-lg font-mono text-red-600">0%</div>
+                        </div>
+                    </div>
+                    
+                    <div class="chart-container-small flex-1 min-w-0">
+                        <canvas id="brake-chart"></canvas>
+                    </div>
+                </div>
             </div>
         </div>
 
         <!-- Main 4-Panel Grid -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
-            <!-- Top Left: Torque Chart -->
-             <div class="glass-card rounded-lg p-3">
-                <div class="flex items-center justify-between mb-2">
-                    <h3 class="text-lg font-bold text-purple-400">Torque Over Time / Front</h3>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <!-- Torque Chart -->
+             <div class="glass-card rounded-lg p-6">
+                <div class="section-title">
+                    <svg class="w-6 h-6 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3" class="stroke-zinc-400" />
+                        <circle cx="12" cy="12" r="1" class="fill-zinc-400 stroke-zinc-400" />
+                        
+                        <line x1="2" y1="12" x2="9" y2="12" class="stroke-zinc-400" />
+                        <line x1="15" y1="12" x2="22" y2="12" class="stroke-zinc-400" />
+                        
+                        <path d="M2 9v6M22 9v6" class="stroke-zinc-400" />
+                    </svg>
+                    <span class="text-xl font-bold text-zinc-400">Front Torque History</span>
                 </div>
                 <div class="chart-container">
                     <canvas id="torque-chart-front"></canvas>
                 </div>
             </div>
 
-            <div class="glass-card rounded-lg p-3">
-                <div class="flex items-center justify-between mb-2">
-                    <h3 class="text-lg font-bold text-purple-400">Torque Over Time / Rear</h3>
+            <div class="glass-card rounded-lg p-6">
+                <div class="section-title">
+                    <svg class="w-6 h-6 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3" class="stroke-zinc-400" />
+                        <circle cx="12" cy="12" r="1" class="fill-zinc-400 stroke-zinc-400" />
+                        
+                        <line x1="2" y1="12" x2="9" y2="12" class="stroke-zinc-400" />
+                        <line x1="15" y1="12" x2="22" y2="12" class="stroke-zinc-400" />
+                        
+                        <path d="M2 9v6M22 9v6" class="stroke-zinc-400" />
+                    </svg>
+                    <span class="text-xl font-bold text-zinc-400">Rear Torque History</span>
                 </div>
                 <div class="chart-container">
-                    <canvas id="torque-chart"></canvas>
+                    <canvas id="torque-chart-rear"></canvas>
                 </div>
             </div>
 
-            <!-- Top Right: RPM Chart -->
-            <div class="glass-card rounded-lg p-3">
-                <div class="flex items-center justify-between mb-2">
-                    <h3 class="text-lg font-bold text-cyan-400">RPM Over Time</h3>
+            <!-- RPM Chart -->
+            <div class="glass-card rounded-lg p-6">
+                <div class="section-title">
+                    <svg class="w-6 h-6 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="9" class="stroke-zinc-400" stroke-dasharray="4 4"/>
+                        
+                        <path d="M12 6a6 6 0 1 1-6 6" class="stroke-zinc-400" />
+                        
+                        <circle cx="12" cy="12" r="2" class="fill-zinc-400 stroke-zinc-400" />
+                    </svg>
+                    <span class="text-lg font-bold text-zinc-400">RPM History</span>
                 </div>
                 <div class="chart-container">
                     <canvas id="rpm-chart"></canvas>
                 </div>
             </div>
 
-            <!-- Bottom Left: Motor Temperatures -->
-            <div class="glass-card rounded-lg p-3">
-                <h3 class="text-lg font-bold text-orange-400 mb-3">Motor Temperatures</h3>
-                <div class="grid grid-cols-2 gap-3">
-                    <!-- RL Motor -->
-                    <div class="text-center">
-                        <div class="text-sm text-white font-bold mb-2">RL Motor</div>
-                        <div id="temp-rl" class="temp-display cold">--°C</div>
-                        <div class="mt-2 text-xs text-slate-500">
-                            MOS: <span id="temp-rl-mos" class="font-bold">--</span> | 
-                            MCU: <span id="temp-rl-mcu" class="font-bold">--</span>
-                        </div>
-                    </div>
-                    <!-- RR Motor -->
-                    <div class="text-center">
-                        <div class="text-sm text-white font-bold mb-2">RR Motor</div>
-                        <div id="temp-rr" class="temp-display cold">--°C</div>
-                        <div class="mt-2 text-xs text-slate-500">
-                            MOS: <span id="temp-rr-mos" class="font-bold">--</span> | 
-                            MCU: <span id="temp-rr-mcu" class="font-bold">--</span>
-                        </div>
-                    </div>
+            <!-- Battery Temperature Chart -->
+            <!-- <div class="glass-card rounded-lg p-6">
+                <div class="section-title">
+                    <svg class="w-6 h-6 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="7" width="16" height="10" rx="2" class="stroke-zinc-400" />
+                        <path d="M20 11v2" class="stroke-zinc-400" />
+                        
+                        <path d="M11 9l-3 3h3l-1 3 3-3h-3l1-3z" class="fill-zinc-400 stroke-zinc-400" />
+                    </svg>
+
+                    <span class="text-lg font-bold text-zinc-400">Battery Temperature</span>
+                </div>
+                <div class="chart-container">
+                    <canvas id="battery-temp-chart"></canvas>
+                </div>
+            </div> -->
+
+            <!-- Motor Temperatures -->
+            <div class="glass-card rounded-lg p-6">
+                <div class="section-title">
+                    <svg class="w-6 h-6 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="4" class="stroke-zinc-400" />
+                        <circle cx="12" cy="12" r="1.5" class="fill-zinc-400 stroke-zinc-400" />
+                        
+                        <path d="M6 8a7 7 0 0 1 12 0" class="stroke-zinc-400" />
+                        <path d="M18 16a7 7 0 0 1-12 0" class="stroke-zinc-400" />
+                    </svg>
+
+                    <span class="text-lg font-bold text-zinc-400">Motor Temperature</span> 
+                </div>
+                <div class="card grid grid-cols-2 gap-3 lg:h-[85%] items-center justify-center">
                     <!-- FL Motor -->
                     <div class="text-center">
                         <div class="text-sm text-white font-bold mb-2">FL Motor</div>
@@ -189,204 +280,243 @@
                             MCU: <span id="temp-fr-mcu" class="font-bold">--</span>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <!-- Bottom Right: Status Display -->
-            <div class="glass-card rounded-lg p-3">
-                <h3 class="text-lg font-bold text-blue-400 mb-2">Status</h3>
-                <div class="space-y-2">
-                    <!-- RL Status -->
-                    <div class="border-l-4 border-yellow-500 pl-2 py-1">
-                        <div class="flex items-center justify-between mb-2">
-                            <div class="flex items-center gap-3">
-                                <span class="font-bold text-yellow-400 text-sm">RL</span>
-                                <div class="status-lights">
-                                    <div class="flex flex-col items-center">
-                                        <div class="status-light off" id="status-rl-ready"></div>
-                                        <div class="status-light-label">RDY</div>
-                                    </div>
-                                    <div class="flex flex-col items-center">
-                                        <div class="status-light off" id="status-rl-enable"></div>
-                                        <div class="status-light-label">EN</div>
-                                    </div>
-                                    <div class="flex flex-col items-center">
-                                        <div class="status-light off" id="status-rl-fault"></div>
-                                        <div class="status-light-label">FLT</div>
-                                    </div>
-                                    <div class="flex flex-col items-center">
-                                        <div class="status-light off" id="status-rl-hv"></div>
-                                        <div class="status-light-label">HV</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <span class="heartbeat-indicator heartbeat-fail" data-inv="3"></span>
-                        </div>
-                        <div class="grid grid-cols-4 gap-2 text-xs">
-                            <div class="bg-slate-800/50 rounded p-2">
-                                <div class="text-slate-400 text-[10px]">Torque</div>
-                                <div class="font-mono font-bold text-white" id="status-rl-torque">--</div>
-                            </div>
-                            <div class="bg-slate-800/50 rounded p-2">
-                                <div class="text-slate-400 text-[10px]">DC V</div>
-                                <div class="font-mono font-bold text-white" id="status-rl-voltage">--</div>
-                            </div>
-                            <div class="bg-slate-800/50 rounded p-2">
-                                <div class="text-slate-400 text-[10px]">DC I</div>
-                                <div class="font-mono font-bold text-white" id="status-rl-current">--</div>
-                            </div>
-                            <div class="bg-slate-800/50 rounded p-2">
-                                <div class="text-slate-400 text-[10px]">Error</div>
-                                <div class="font-mono font-bold text-red-400 text-[10px]" id="status-rl-error">--</div>
-                            </div>
+                    <!-- RL Motor -->
+                    <div class="text-center">
+                        <div class="text-sm text-white font-bold mb-2">RL Motor</div>
+                        <div id="temp-rl" class="temp-display cold">--°C</div>
+                        <div class="mt-2 text-xs text-slate-500">
+                            MOS: <span id="temp-rl-mos" class="font-bold">--</span> | 
+                            MCU: <span id="temp-rl-mcu" class="font-bold">--</span>
                         </div>
                     </div>
-
-                    <!-- RR Status -->
-                    <div class="border-l-4 border-red-500 pl-2 py-1">
-                        <div class="flex items-center justify-between mb-2">
-                            <div class="flex items-center gap-3">
-                                <span class="font-bold text-red-400 text-sm">RR</span>
-                                <div class="status-lights">
-                                    <div class="flex flex-col items-center">
-                                        <div class="status-light off" id="status-rr-ready"></div>
-                                        <div class="status-light-label">RDY</div>
-                                    </div>
-                                    <div class="flex flex-col items-center">
-                                        <div class="status-light off" id="status-rr-enable"></div>
-                                        <div class="status-light-label">EN</div>
-                                    </div>
-                                    <div class="flex flex-col items-center">
-                                        <div class="status-light off" id="status-rr-fault"></div>
-                                        <div class="status-light-label">FLT</div>
-                                    </div>
-                                    <div class="flex flex-col items-center">
-                                        <div class="status-light off" id="status-rr-hv"></div>
-                                        <div class="status-light-label">HV</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <span class="heartbeat-indicator heartbeat-fail" data-inv="4"></span>
-                        </div>
-                        <div class="grid grid-cols-4 gap-2 text-xs">
-                            <div class="bg-slate-800/50 rounded p-2">
-                                <div class="text-slate-400 text-[10px]">Torque</div>
-                                <div class="font-mono font-bold text-white" id="status-rr-torque">--</div>
-                            </div>
-                            <div class="bg-slate-800/50 rounded p-2">
-                                <div class="text-slate-400 text-[10px]">DC V</div>
-                                <div class="font-mono font-bold text-white" id="status-rr-voltage">--</div>
-                            </div>
-                            <div class="bg-slate-800/50 rounded p-2">
-                                <div class="text-slate-400 text-[10px]">DC I</div>
-                                <div class="font-mono font-bold text-white" id="status-rr-current">--</div>
-                            </div>
-                            <div class="bg-slate-800/50 rounded p-2">
-                                <div class="text-slate-400 text-[10px]">Error</div>
-                                <div class="font-mono font-bold text-red-400 text-[10px]" id="status-rr-error">--</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- FL Status -->
-                    <div class="border-l-4 border-green-500 pl-2 py-1">
-                        <div class="flex items-center justify-between mb-2">
-                            <div class="flex items-center gap-3">
-                                <span class="font-bold text-green-400 text-sm">FL</span>
-                                <div class="status-lights">
-                                    <div class="flex flex-col items-center">
-                                        <div class="status-light off" id="status-fl-ready"></div>
-                                        <div class="status-light-label">RDY</div>
-                                    </div>
-                                    <div class="flex flex-col items-center">
-                                        <div class="status-light off" id="status-fl-enable"></div>
-                                        <div class="status-light-label">EN</div>
-                                    </div>
-                                    <div class="flex flex-col items-center">
-                                        <div class="status-light off" id="status-fl-fault"></div>
-                                        <div class="status-light-label">FLT</div>
-                                    </div>
-                                    <div class="flex flex-col items-center">
-                                        <div class="status-light off" id="status-fl-hv"></div>
-                                        <div class="status-light-label">HV</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <span class="heartbeat-indicator heartbeat-fail" data-inv="1"></span>
-                        </div>
-                        <div class="grid grid-cols-4 gap-2 text-xs">
-                            <div class="bg-slate-800/50 rounded p-2">
-                                <div class="text-slate-400 text-[10px]">Torque</div>
-                                <div class="font-mono font-bold text-white" id="status-fl-torque">--</div>
-                            </div>
-                            <div class="bg-slate-800/50 rounded p-2">
-                                <div class="text-slate-400 text-[10px]">DC V</div>
-                                <div class="font-mono font-bold text-white" id="status-fl-voltage">--</div>
-                            </div>
-                            <div class="bg-slate-800/50 rounded p-2">
-                                <div class="text-slate-400 text-[10px]">DC I</div>
-                                <div class="font-mono font-bold text-white" id="status-fl-current">--</div>
-                            </div>
-                            <div class="bg-slate-800/50 rounded p-2">
-                                <div class="text-slate-400 text-[10px]">Error</div>
-                                <div class="font-mono font-bold text-red-400 text-[10px]" id="status-fl-error">--</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- FR Status -->
-                    <div class="border-l-4 border-blue-500 pl-2 py-1">
-                        <div class="flex items-center justify-between mb-2">
-                            <div class="flex items-center gap-3">
-                                <span class="font-bold text-blue-400 text-sm">FR</span>
-                                <div class="status-lights">
-                                    <div class="flex flex-col items-center">
-                                        <div class="status-light off" id="status-fr-ready"></div>
-                                        <div class="status-light-label">RDY</div>
-                                    </div>
-                                    <div class="flex flex-col items-center">
-                                        <div class="status-light off" id="status-fr-enable"></div>
-                                        <div class="status-light-label">EN</div>
-                                    </div>
-                                    <div class="flex flex-col items-center">
-                                        <div class="status-light off" id="status-fr-fault"></div>
-                                        <div class="status-light-label">FLT</div>
-                                    </div>
-                                    <div class="flex flex-col items-center">
-                                        <div class="status-light off" id="status-fr-hv"></div>
-                                        <div class="status-light-label">HV</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <span class="heartbeat-indicator heartbeat-fail" data-inv="2"></span>
-                        </div>
-                        <div class="grid grid-cols-4 gap-2 text-xs">
-                            <div class="bg-slate-800/50 rounded p-2">
-                                <div class="text-slate-400 text-[10px]">Torque</div>
-                                <div class="font-mono font-bold text-white" id="status-fr-torque">--</div>
-                            </div>
-                            <div class="bg-slate-800/50 rounded p-2">
-                                <div class="text-slate-400 text-[10px]">DC V</div>
-                                <div class="font-mono font-bold text-white" id="status-fr-voltage">--</div>
-                            </div>
-                            <div class="bg-slate-800/50 rounded p-2">
-                                <div class="text-slate-400 text-[10px]">DC I</div>
-                                <div class="font-mono font-bold text-white" id="status-fr-current">--</div>
-                            </div>
-                            <div class="bg-slate-800/50 rounded p-2">
-                                <div class="text-slate-400 text-[10px]">Error</div>
-                                <div class="font-mono font-bold text-red-400 text-[10px]" id="status-fr-error">--</div>
-                            </div>
+                    <!-- RR Motor -->
+                    <div class="text-center">
+                        <div class="text-sm text-white font-bold mb-2">RR Motor</div>
+                        <div id="temp-rr" class="temp-display cold">--°C</div>
+                        <div class="mt-2 text-xs text-slate-500">
+                            MOS: <span id="temp-rr-mos" class="font-bold">--</span> | 
+                            MCU: <span id="temp-rr-mcu" class="font-bold">--</span>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Footer -->
-        <div class="glass-card rounded-lg p-2 text-center">
-            <p class="text-slate-400 text-sm">NTURT Racing Team - Enhanced Dashboard v3.0</p>
+        <!-- Status Display -->
+        <div class="glass-card rounded-lg p-6">
+            <div class="section-title">
+                <svg class="w-6 h-6 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <!-- Central Rotational Shaft Axis -->
+                    <circle cx="12" cy="12" r="3" class="stroke-zinc-400" />
+                    <circle cx="12" cy="12" r="1" class="fill-zinc-400 stroke-zinc-400" />
+                    
+                    <!-- 3-Phase Magnetic Pole / Stator Elements (120-degree orientation) -->
+                    <!-- Top Phase -->
+                    <path d="M12 9V3M10 3h4" class="stroke-zinc-400" />
+                    <!-- Bottom Left Phase -->
+                    <path d="M9.4 13.5l-5.2 3M3.2 15l2 3.5" class="stroke-zinc-400" />
+                    <!-- Bottom Right Phase -->
+                    <path d="M14.6 13.5l5.2 3M18.8 18.5l2-3.5" class="stroke-zinc-400" />
+                </svg>
+
+                <span class="text-lg font-bold text-zinc-400">Motor Status</span>
+            </div>
+            
+            <div class="grid lg:grid-cols-2 gap-8">
+                <!-- FL Status -->
+                <div class="border-l-4 border-sky-400 pl-2 py-1">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center gap-3">
+                            <span class="font-bold text-sky-400 text-sm">FL</span>
+                            <div class="status-lights px-3">
+                                <div class="flex flex-col items-center">
+                                    <div class="status-light off" id="status-fl-ready"></div>
+                                    <div class="status-light-label">RDY</div>
+                                </div>
+                                <div class="flex flex-col items-center">
+                                    <div class="status-light off" id="status-fl-enable"></div>
+                                    <div class="status-light-label">EN</div>
+                                </div>
+                                <div class="flex flex-col items-center">
+                                    <div class="status-light off" id="status-fl-fault"></div>
+                                    <div class="status-light-label">FLT</div>
+                                </div>
+                                <div class="flex flex-col items-center">
+                                    <div class="status-light off" id="status-fl-hv"></div>
+                                    <div class="status-light-label">HV</div>
+                                </div>
+                            </div>
+                        </div>
+                        <span class="heartbeat-indicator heartbeat-fail" data-inv="1"></span>
+                    </div>
+                    <div class="grid grid-cols-4 gap-2 text-xs">
+                        <div class="bg-zinc-800/50 rounded p-2">
+                            <div class="text-slate-400 text-[10px]">Torque</div>
+                            <div class="font-mono font-bold text-white" id="status-fl-torque">--</div>
+                        </div>
+                        <div class="bg-zinc-800/50 rounded p-2">
+                            <div class="text-slate-400 text-[10px]">DC V</div>
+                            <div class="font-mono font-bold text-white" id="status-fl-voltage">--</div>
+                        </div>
+                        <div class="bg-zinc-800/50 rounded p-2">
+                            <div class="text-slate-400 text-[10px]">DC I</div>
+                            <div class="font-mono font-bold text-white" id="status-fl-current">--</div>
+                        </div>
+                        <div class="bg-zinc-800/50 rounded p-2">
+                            <div class="text-slate-400 text-[10px]">Error</div>
+                            <div class="font-mono font-bold text-red-500 text-[10px]" id="status-fl-error">--</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FR Status -->
+                <div class="border-l-4 border-slate-200 pl-2 py-1">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center gap-3">
+                            <span class="font-bold text-slate-200 text-sm">FR</span>
+                            <div class="status-lights px-3">
+                                <div class="flex flex-col items-center">
+                                    <div class="status-light off" id="status-fr-ready"></div>
+                                    <div class="status-light-label">RDY</div>
+                                </div>
+                                <div class="flex flex-col items-center">
+                                    <div class="status-light off" id="status-fr-enable"></div>
+                                    <div class="status-light-label">EN</div>
+                                </div>
+                                <div class="flex flex-col items-center">
+                                    <div class="status-light off" id="status-fr-fault"></div>
+                                    <div class="status-light-label">FLT</div>
+                                </div>
+                                <div class="flex flex-col items-center">
+                                    <div class="status-light off" id="status-fr-hv"></div>
+                                    <div class="status-light-label">HV</div>
+                                </div>
+                            </div>
+                        </div>
+                        <span class="heartbeat-indicator heartbeat-fail" data-inv="2"></span>
+                    </div>
+                    <div class="grid grid-cols-4 gap-2 text-xs">
+                        <div class="bg-zinc-800/50 rounded p-2">
+                            <div class="text-slate-400 text-[10px]">Torque</div>
+                            <div class="font-mono font-bold text-white" id="status-fr-torque">--</div>
+                        </div>
+                        <div class="bg-zinc-800/50 rounded p-2">
+                            <div class="text-slate-400 text-[10px]">DC V</div>
+                            <div class="font-mono font-bold text-white" id="status-fr-voltage">--</div>
+                        </div>
+                        <div class="bg-zinc-800/50 rounded p-2">
+                            <div class="text-slate-400 text-[10px]">DC I</div>
+                            <div class="font-mono font-bold text-white" id="status-fr-current">--</div>
+                        </div>
+                        <div class="bg-zinc-800/50 rounded p-2">
+                            <div class="text-slate-400 text-[10px]">Error</div>
+                            <div class="font-mono font-bold text-red-500 text-[10px]" id="status-fr-error">--</div>
+                        </div>
+                    </div>
+                </div>
+                <!-- RL Status -->
+                <div class="border-l-4 border-emerald-600 pl-2 py-1">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center gap-3">
+                            <span class="font-bold text-emerald-600 text-sm">RL</span>
+                            <div class="status-lights px-3">
+                                <div class="flex flex-col items-center">
+                                    <div class="status-light off" id="status-rl-ready"></div>
+                                    <div class="status-light-label">RDY</div>
+                                </div>
+                                <div class="flex flex-col items-center">
+                                    <div class="status-light off" id="status-rl-enable"></div>
+                                    <div class="status-light-label">EN</div>
+                                </div>
+                                <div class="flex flex-col items-center">
+                                    <div class="status-light off" id="status-rl-fault"></div>
+                                    <div class="status-light-label">FLT</div>
+                                </div>
+                                <div class="flex flex-col items-center">
+                                    <div class="status-light off" id="status-rl-hv"></div>
+                                    <div class="status-light-label">HV</div>
+                                </div>
+                            </div>
+                        </div>
+                        <span class="heartbeat-indicator heartbeat-fail" data-inv="3"></span>
+                    </div>
+                    <div class="grid grid-cols-4 gap-2 text-xs">
+                        <div class="bg-zinc-800/50 rounded p-2">
+                            <div class="text-slate-400 text-[10px]">Torque</div>
+                            <div class="font-mono font-bold text-white" id="status-rl-torque">--</div>
+                        </div>
+                        <div class="bg-zinc-800/50 rounded p-2">
+                            <div class="text-slate-400 text-[10px]">DC V</div>
+                            <div class="font-mono font-bold text-white" id="status-rl-voltage">--</div>
+                        </div>
+                        <div class="bg-zinc-800/50 rounded p-2">
+                            <div class="text-slate-400 text-[10px]">DC I</div>
+                            <div class="font-mono font-bold text-white" id="status-rl-current">--</div>
+                        </div>
+                        <div class="bg-zinc-800/50 rounded p-2">
+                            <div class="text-slate-400 text-[10px]">Error</div>
+                            <div class="font-mono font-bold text-red-500 text-[10px]" id="status-rl-error">--</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RR Status -->
+                <div class="border-l-4 border-amber-400 pl-2 py-1">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center gap-3">
+                            <span class="font-bold text-amber-400 text-sm">RR</span>
+                            <div class="status-lights px-3">
+                                <div class="flex flex-col items-center">
+                                    <div class="status-light off" id="status-rr-ready"></div>
+                                    <div class="status-light-label">RDY</div>
+                                </div>
+                                <div class="flex flex-col items-center">
+                                    <div class="status-light off" id="status-rr-enable"></div>
+                                    <div class="status-light-label">EN</div>
+                                </div>
+                                <div class="flex flex-col items-center">
+                                    <div class="status-light off" id="status-rr-fault"></div>
+                                    <div class="status-light-label">FLT</div>
+                                </div>
+                                <div class="flex flex-col items-center">
+                                    <div class="status-light off" id="status-rr-hv"></div>
+                                    <div class="status-light-label">HV</div>
+                                </div>
+                            </div>
+                        </div>
+                        <span class="heartbeat-indicator heartbeat-fail" data-inv="4"></span>
+                    </div>
+                    <div class="grid grid-cols-4 gap-2 text-xs">
+                        <div class="bg-zinc-800/50 rounded p-2">
+                            <div class="text-slate-400 text-[10px]">Torque</div>
+                            <div class="font-mono font-bold text-white" id="status-rr-torque">--</div>
+                        </div>
+                        <div class="bg-zinc-800/50 rounded p-2">
+                            <div class="text-slate-400 text-[10px]">DC V</div>
+                            <div class="font-mono font-bold text-white" id="status-rr-voltage">--</div>
+                        </div>
+                        <div class="bg-zinc-800/50 rounded p-2">
+                            <div class="text-slate-400 text-[10px]">DC I</div>
+                            <div class="font-mono font-bold text-white" id="status-rr-current">--</div>
+                        </div>
+                        <div class="bg-zinc-800/50 rounded p-2">
+                            <div class="text-slate-400 text-[10px]">Error</div>
+                            <div class="font-mono font-bold text-red-500 text-[10px]" id="status-rr-error">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
+
     </div>
+
+    <!-- Bootstrap -->
+	<script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"></script> 
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.3/umd/popper.min.js"></script> 
+	<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/js/bootstrap.min.js"></script>
+  
+    <!-- Gauge -->
+	<script src="//cdn.rawgit.com/Mikhus/canvas-gauges/gh-pages/download/2.1.4/radial/gauge.min.js"></script>
+  
 </body>
 </html>
