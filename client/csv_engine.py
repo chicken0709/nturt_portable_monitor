@@ -9,11 +9,13 @@ import csv
 import json
 import time
 import glob
+import base64
+import fnmatch
 import asyncio
 from datetime import datetime
 
 CSV_REPLAY_SPEED = 1.0
-LOGS_DIR = '../../LOGS'
+LOGS_DIR = 'D:\\nturacing\\logs_0712'
 
 class CSVEngine:
     def __init__ (self, client):
@@ -215,6 +217,65 @@ class CSVEngine:
         except Exception as e:
             print(f"Error scanning CSV files: {e}")
             return []
+
+    def get_logs_root(self):
+        # resolve LOGS_DIR from this file so systemd cwd differences do not matter
+        return os.path.abspath(os.path.join(os.path.dirname(__file__), LOGS_DIR))
+
+    def scan_candecoder_log_files(self, pattern='*.csv', recursive=True):
+        root = self.get_logs_root()
+        csv_files = []
+        if not os.path.isdir(root):
+            return csv_files
+
+        if recursive:
+            iterator = (
+                os.path.join(dirpath, filename)
+                for dirpath, _, filenames in os.walk(root)
+                for filename in filenames
+            )
+        else:
+            iterator = glob.glob(os.path.join(root, pattern))
+
+        for filepath in iterator:
+            filename = os.path.basename(filepath)
+            if not fnmatch.fnmatch(filename, pattern):
+                continue
+            if filename.lower().endswith('_decoded.csv'):
+                continue
+            try:
+                file_stat = os.stat(filepath)
+                relative_path = os.path.relpath(filepath, root).replace(os.sep, '/')
+                csv_files.append({
+                    'name': filename,
+                    'filename': filename,
+                    'relative_path': relative_path,
+                    'path': filepath,
+                    'modified': datetime.fromtimestamp(file_stat.st_mtime).isoformat(),
+                    'mtime': file_stat.st_mtime,
+                    'size': file_stat.st_size,
+                    'size_mb': round(file_stat.st_size / 1024 / 1024, 2)
+                })
+            except OSError:
+                continue
+
+        csv_files.sort(key=lambda row: row['relative_path'].lower())
+        return csv_files
+
+    def resolve_candecoder_log_path(self, relative_path):
+        root = self.get_logs_root()
+        safe_parts = [
+            part
+            for part in str(relative_path or '').replace('\\', '/').split('/')
+            if part and part not in ('.', '..')
+        ]
+        candidate = os.path.abspath(os.path.join(root, *safe_parts))
+        root_with_sep = root if root.endswith(os.sep) else root + os.sep
+        if candidate != root and not candidate.startswith(root_with_sep):
+            raise ValueError('Requested path is outside LOGS_DIR.')
+        if not os.path.isfile(candidate):
+            raise FileNotFoundError(relative_path)
+        return candidate
         
     async def handle_request_csv_list(self, data):
         # server requests CSV file list
@@ -231,6 +292,68 @@ class CSVEngine:
         print(f"[DEBUG] Sending response with {len(csv_files)} files")
         await self.client.websocket.send(json.dumps(response))
         print(f"[DEBUG] Response sent successfully")
+
+    async def handle_candecoder_request_log_list(self, data):
+        request_id = data.get('request_id')
+        pattern = data.get('pattern') or '*.csv'
+        recursive = bool(data.get('recursive', True))
+        print(f"[CANDECODER] Listing logs: pattern={pattern}, recursive={recursive}")
+        try:
+            files = self.scan_candecoder_log_files(pattern=pattern, recursive=recursive)
+            await self.client.websocket.send(json.dumps({
+                'type': 'candecoder_log_list',
+                'request_id': request_id,
+                'files': files,
+                'count': len(files)
+            }))
+        except Exception as e:
+            await self.client.websocket.send(json.dumps({
+                'type': 'candecoder_file_error',
+                'request_id': request_id,
+                'message': str(e)
+            }))
+
+    async def handle_candecoder_get_file(self, data):
+        request_id = data.get('request_id')
+        relative_path = data.get('relative_path')
+        chunk_size = int(data.get('chunk_size') or (256 * 1024))
+        chunk_size = max(16 * 1024, min(chunk_size, 512 * 1024))
+        print(f"[CANDECODER] Sending file: {relative_path}")
+        try:
+            filepath = self.resolve_candecoder_log_path(relative_path)
+            total_size = os.path.getsize(filepath)
+            offset = 0
+            with open(filepath, 'rb') as handle:
+                while True:
+                    chunk = handle.read(chunk_size)
+                    if not chunk:
+                        break
+                    await self.client.websocket.send(json.dumps({
+                        'type': 'candecoder_file_chunk',
+                        'request_id': request_id,
+                        'relative_path': relative_path,
+                        'offset': offset,
+                        'size': total_size,
+                        'data': base64.b64encode(chunk).decode('ascii')
+                    }))
+                    offset += len(chunk)
+                    await asyncio.sleep(0)
+
+            await self.client.websocket.send(json.dumps({
+                'type': 'candecoder_file_complete',
+                'request_id': request_id,
+                'relative_path': relative_path,
+                'size': total_size
+            }))
+            print(f"[CANDECODER] Sent {relative_path} ({total_size} bytes)")
+        except Exception as e:
+            print(f"[CANDECODER] File transfer failed: {e}")
+            await self.client.websocket.send(json.dumps({
+                'type': 'candecoder_file_error',
+                'request_id': request_id,
+                'relative_path': relative_path,
+                'message': str(e)
+            }))
 
     async def handle_select_csv(self, data):
         # server selects a CSV file for replay

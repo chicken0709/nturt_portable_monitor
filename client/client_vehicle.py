@@ -59,7 +59,9 @@ class CANDataClient:
             'csv_jump_percentage': self.csv_engine.handle_csv_jump_percentage,
             'csv_jump_time': self.csv_engine.handle_csv_jump_time,
             'csv_set_speed': self.csv_engine.handle_csv_set_speed,
-            'csv_restart': self.csv_engine.handle_csv_restart
+            'csv_restart': self.csv_engine.handle_csv_restart,
+            'candecoder_request_log_list': self.csv_engine.handle_candecoder_request_log_list,
+            'candecoder_get_file': self.csv_engine.handle_candecoder_get_file
         }
 
     async def run(self):

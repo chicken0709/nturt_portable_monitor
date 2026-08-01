@@ -18,6 +18,7 @@ from fastapi import FastAPI, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from can_decoder import CANDecoder
+from candecoder_service import CANDecoderSyncService
 
 # Configuration
 WEB_PORT  = 8888  # server hosting port
@@ -64,6 +65,11 @@ class RemoteCANServer:
             'csv_progress': 'handle_csv_progress',
             'error': 'handle_error'
         }
+        self.candecoder_sync = CANDecoderSyncService(
+            self.send_candecoder_command,
+            self.broadcast_to_web_clients,
+            lambda: bool(vehicle_clients),
+        )
         
         print("Remote CAN Server initialized")
 
@@ -103,7 +109,15 @@ class RemoteCANServer:
             async for message in websocket:
                 try:
                     data = json.loads(message)
-                    handler_name = self.message_handlers.get(data['type'])
+                    msg_type = data.get('type')
+
+                    if await self.candecoder_sync.handle_vehicle_message(data, client_id):
+                        continue
+
+                    handler_name = self.message_handlers.get(msg_type)
+                    if not handler_name:
+                        print(f"Unknown message type from {client_id}: {msg_type}")
+                        continue
                     handler = getattr(self, handler_name)
                     
                     await handler(data, client_id)
@@ -260,6 +274,9 @@ class RemoteCANServer:
             print(f"❌ Send error: {e}")
             return {'error': str(e)}
 
+    async def send_candecoder_command(self, message_dict):
+        return await self.send_to_vehicle_client(message_dict, {'status': 'sent'})
+
 class MockCanMessage:
     def __init__(self, arbitration_id, data):
         self.arbitration_id = arbitration_id
@@ -300,6 +317,10 @@ async def xsens_dashboard(request: Request):
 @app.get("/csv_control", response_class=HTMLResponse)
 async def csv_control(request: Request):
     return templates.TemplateResponse("csv_control.html", {"request": request})
+
+@app.get("/candecoder", response_class=HTMLResponse)
+async def candecoder(request: Request):
+    return templates.TemplateResponse("candecoder.html", {"request": request})
 
 @app.get('/api/data')
 async def get_data():
@@ -348,6 +369,75 @@ async def get_status():
             for client_id, info in vehicle_clients.items()
         ]
     }
+
+@app.get('/api/candecoder/templates')
+async def get_candecoder_templates():
+    if not can_server:
+        return {'templates': []}
+    return {'templates': can_server.candecoder_sync.template_rows()}
+
+@app.get('/api/candecoder/dbcs')
+async def get_candecoder_dbcs():
+    if not can_server:
+        return {'dbcs': []}
+    return {'dbcs': can_server.candecoder_sync.dbc_rows()}
+
+@app.post('/api/candecoder/signals')
+async def get_candecoder_signals(request: Request):
+    if not can_server:
+        return {'signals': []}
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    try:
+        return {'signals': can_server.candecoder_sync.signal_rows(data.get('dbc_names') or [])}
+    except Exception as e:
+        return {'error': str(e), 'signals': []}
+
+@app.post('/api/candecoder/templates/save')
+async def save_candecoder_template(request: Request):
+    if not can_server:
+        return {'error': 'CAN server not initialized'}
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    try:
+        return can_server.candecoder_sync.save_template(
+            name=data.get('name') or '',
+            original_name=data.get('original_name') or None,
+            signals=data.get('signals') or [],
+        )
+    except Exception as e:
+        return {'error': str(e)}
+
+@app.get('/api/candecoder/status')
+async def get_candecoder_status():
+    if not can_server:
+        return {'error': 'CAN server not initialized'}
+    status = can_server.candecoder_sync.get_status()
+    status['vehicle_clients'] = len(vehicle_clients)
+    return status
+
+@app.post('/api/candecoder/start')
+async def start_candecoder(request: Request):
+    if not can_server:
+        return {'error': 'CAN server not initialized'}
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    return await can_server.candecoder_sync.start(
+        template_name=data.get('template_name'),
+        pattern=data.get('pattern') or '*.csv',
+        source_mode=data.get('source_mode') or 'client',
+        rpi_host=data.get('rpi_host'),
+        rpi_user=data.get('rpi_user') or 'pi',
+        rpi_password=data.get('rpi_password'),
+        remote_log_dir=data.get('remote_log_dir'),
+        dbc_names=data.get('dbc_names') or [],
+    )
 
 @app.post('/api/csv/request_list')
 async def request_csv_list():

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NTURT CAN Decoder</title>
+    <link rel="icon" href="/static/images/logo.png" type="image/png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/static/js/candecoder.js" defer></script>
+    <link rel="stylesheet" href="/static/css/candecoder.css">
+</head>
+<body class="min-h-screen bg-zinc-950 text-zinc-100 font-sans antialiased">
+    <main class="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-5 px-5 py-6 lg:px-8">
+        <header class="flex flex-col gap-4 border-b border-zinc-800 pb-5 md:flex-row md:items-end md:justify-between">
+            <div>
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-sky-400">NTURT Remote Monitor</p>
+                <h1 class="mt-2 text-3xl font-bold tracking-tight text-white">CAN Log Decoder</h1>
+            </div>
+            <div class="status-strip">
+                <div>
+                    <span class="status-label">Server</span>
+                    <span id="serverState" class="status-value text-emerald-400">Running</span>
+                </div>
+                <div>
+                    <span class="status-label">Pi Client</span>
+                    <span id="vehicleCount" class="status-value text-amber-300">0</span>
+                </div>
+                <div>
+                    <span class="status-label">Task</span>
+                    <span id="taskState" class="status-value text-zinc-300">Idle</span>
+                </div>
+            </div>
+        </header>
+
+        <section class="grid min-h-0 grid-cols-1 gap-5 lg:grid-cols-[380px_minmax(0,1fr)]">
+            <aside class="panel">
+                <div class="panel-heading">
+                    <span>Decode Setup</span>
+                </div>
+
+                <label class="field">
+                    <span>Source</span>
+                    <select id="sourceMode">
+                        <option value="ssh" selected>SSH/SFTP by RPI IP</option>
+                        <option value="client">Connected vehicle client</option>
+                    </select>
+                </label>
+
+                <div id="sshFields" class="source-fields">
+                    <label class="field">
+                        <span>RPI IP / Host</span>
+                        <input id="rpiHostInput" type="text" placeholder="100.x.x.x or 192.168.x.x" autocomplete="off">
+                    </label>
+
+                    <div class="two-col">
+                        <label class="field">
+                            <span>User</span>
+                            <input id="rpiUserInput" type="text" value="pi" autocomplete="username">
+                        </label>
+                        <label class="field">
+                            <span>Password</span>
+                            <input id="rpiPasswordInput" type="password" autocomplete="current-password">
+                        </label>
+                    </div>
+
+                    <label class="field">
+                        <span>Remote LOGS Dir</span>
+                        <input id="remoteLogDirInput" type="text" value="/home/pi/Desktop/RPI_Desktop/LOGS" autocomplete="off">
+                    </label>
+                </div>
+
+                <label class="field">
+                    <span>Template</span>
+                    <select id="templateSelect">
+                        <option value="">All DBC signals</option>
+                    </select>
+                </label>
+
+                <details id="templateManager" class="template-manager">
+                    <summary>
+                        <span>Template Manager</span>
+                        <strong id="templateManagerHint">Add / Edit</strong>
+                    </summary>
+                    <div class="template-manager-body">
+                        <label class="field">
+                            <span>Edit Template</span>
+                            <select id="templateEditorSelect">
+                                <option value="">New Template</option>
+                            </select>
+                        </label>
+
+                        <label class="field">
+                            <span>Template Name</span>
+                            <input id="templateNameInput" type="text" autocomplete="off">
+                        </label>
+
+                        <label class="field">
+                            <span>Signal Search</span>
+                            <input id="signalSearchInput" type="text" autocomplete="off" placeholder="CAN ID, message, signal">
+                        </label>
+
+                        <div class="template-toolbar">
+                            <button id="newTemplateButton" class="secondary-action" type="button">New</button>
+                            <button id="selectVisibleSignalsButton" class="secondary-action" type="button">Select Visible</button>
+                            <button id="clearTemplateSignalsButton" class="secondary-action" type="button">Clear</button>
+                        </div>
+
+                        <div id="signalPicker" class="signal-picker"></div>
+
+                        <label class="field template-signal-field">
+                            <span>Selected Signals</span>
+                            <textarea id="templateSignalsInput" spellcheck="false" placeholder="0x100, Speed"></textarea>
+                        </label>
+
+                        <div class="template-save-row">
+                            <span id="templateSignalCount">0 signals</span>
+                            <button id="saveTemplateButton" class="secondary-action accent" type="button">Save Template</button>
+                        </div>
+
+                        <div id="templateEditorMessage" class="template-editor-message hidden"></div>
+                    </div>
+                </details>
+
+                <label class="field">
+                    <span>Remote Pattern</span>
+                    <input id="patternInput" type="text" value="*.csv" autocomplete="off">
+                </label>
+
+                <div class="field">
+                    <span>DBC Files</span>
+                    <div id="dbcList" class="dbc-list"></div>
+                </div>
+
+                <button id="startButton" class="primary-action" type="button">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+                    <span>Sync And Decode</span>
+                </button>
+
+                <div class="folder-list">
+                    <div>
+                        <span>Undecoded</span>
+                        <code id="undecodedFolder">-</code>
+                    </div>
+                    <div>
+                        <span>Decoded</span>
+                        <code id="decodedFolder">-</code>
+                    </div>
+                </div>
+            </aside>
+
+            <section class="panel min-w-0">
+                <div class="panel-heading">
+                    <span>Progress</span>
+                    <strong id="percentLabel">0.0%</strong>
+                </div>
+
+                <div class="progress-track" aria-hidden="true">
+                    <div id="progressFill" class="progress-fill"></div>
+                </div>
+
+                <div class="progress-grid">
+                    <div>
+                        <span>Phase</span>
+                        <strong id="phaseLabel">Idle</strong>
+                    </div>
+                    <div>
+                        <span>Current File</span>
+                        <strong id="currentFile">-</strong>
+                    </div>
+                    <div>
+                        <span>Remote Files</span>
+                        <strong id="remoteCount">0</strong>
+                    </div>
+                    <div>
+                        <span>Downloaded</span>
+                        <strong id="downloadedCount">0</strong>
+                    </div>
+                    <div>
+                        <span>Decoded</span>
+                        <strong id="decodedCount">0</strong>
+                    </div>
+                    <div>
+                        <span>Transfer</span>
+                        <strong id="transferLabel">-</strong>
+                    </div>
+                </div>
+
+                <div id="errorBox" class="error-box hidden"></div>
+
+                <div class="event-log" id="eventLog"></div>
+            </section>
+        </section>
+    </main>
+</body>
+</html>

@@ -346,8 +346,8 @@ const torqueChartFront = new Chart(document.getElementById('torque-chart-front')
             },
             y: {
                 display: true,
-                min: -20,
-                max: 20,
+                min: -25,
+                max: 25,
                 title: {
                     display: true,
                     text: 'Torque (Nm)',
@@ -465,8 +465,8 @@ const torqueChartRear = new Chart(document.getElementById('torque-chart-rear'), 
             },
             y: {
                 display: true,
-                min: -20,
-                max: 20,
+                min: -25,
+                max: 25,
                 title: {
                     display: true,
                     text: 'Torque (Nm)',

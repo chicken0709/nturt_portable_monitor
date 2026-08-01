@@ -604,8 +604,8 @@ class NTURTDashboard {
                             grid: { color: 'rgba(148, 163, 184, 0.1)' }
                         },
                         y: {
-                            min: -20,
-                            max: 20,
+                            min: -25,
+                            max: 25,
                             ticks: { color: '#94a3b8' },
                             grid: { color: 'rgba(148, 163, 184, 0.1)' },
                             title: {
