@@ -8,6 +8,7 @@ import os
 import posixpath
 import shutil
 import stat
+import threading
 import time
 import uuid
 from dataclasses import dataclass
@@ -43,11 +44,15 @@ CHUNK_SIZE = 256 * 1024
 DEFAULT_REMOTE_LOG_DIR = "/home/pi/Desktop/RPI_Desktop/LOGS"
 
 
+class OperationCancelled(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class SourceConfig:
-    mode: str = "client"
-    rpi_host: str = ""
-    rpi_user: str = "pi"
+    mode: str = "ssh"
+    rpi_host: str = "100.115.118.99"
+    rpi_user: str = "nturt"
     rpi_password: str = ""
     remote_log_dir: str = DEFAULT_REMOTE_LOG_DIR
 
@@ -117,22 +122,29 @@ class CANDecoderSyncService:
         self.downloads: dict[str, DownloadSession] = {}
         self.current_task: asyncio.Task | None = None
         self.active_download_context: dict[str, Any] = {}
+        self.cancel_event = threading.Event()
+        self.active_ssh_client: Any | None = None
+        self.active_ssh_lock = threading.Lock()
         self.status = self._initial_status()
 
     def _initial_status(self) -> dict[str, Any]:
         return {
             "task_id": None,
+            "operation": None,
             "state": "idle",
             "phase": "idle",
             "percent": 0.0,
             "message": "Ready",
             "template_name": None,
             "pattern": DEFAULT_PATTERN,
-            "source": {"mode": "client"},
+            "source": {"mode": "ssh"},
             "dbc_names": [],
             "started_at": None,
             "finished_at": None,
             "folders": {},
+            "remote_files": [],
+            "local_raw_files": [],
+            "cancel_requested": False,
             "counts": {
                 "remote_files": 0,
                 "downloaded": 0,
@@ -180,6 +192,125 @@ class CANDecoderSyncService:
             "selected": load_signal_template_items(saved["name"]),
         }
 
+    def _build_source(
+        self,
+        source_mode: str | None = None,
+        rpi_host: str | None = None,
+        rpi_user: str | None = None,
+        rpi_password: str | None = None,
+        remote_log_dir: str | None = None,
+    ) -> SourceConfig:
+        mode = (source_mode or "ssh").strip() or "ssh"
+        if mode != "ssh":
+            raise RuntimeError("CAN decoder source now supports SSH/SFTP by RPI IP only.")
+        return SourceConfig(
+            mode=mode,
+            rpi_host=(rpi_host or "").strip(),
+            rpi_user=(rpi_user or "pi").strip() or "pi",
+            rpi_password=rpi_password or "",
+            remote_log_dir=(remote_log_dir or DEFAULT_REMOTE_LOG_DIR).strip() or DEFAULT_REMOTE_LOG_DIR,
+        )
+
+    async def _queue_operation(
+        self,
+        operation: str,
+        queued_message: str,
+        runner: Callable[[str], Awaitable[None]],
+        template_name: str | None = None,
+        pattern: str | None = None,
+        source: SourceConfig | None = None,
+        dbc_names: list[str] | None = None,
+    ) -> dict[str, Any]:
+        if self.current_task and not self.current_task.done():
+            return {"already_running": True, "status": self.get_status()}
+
+        task_id = uuid.uuid4().hex[:12]
+        clean_template = (template_name or "").strip() or None
+        clean_pattern = (pattern or DEFAULT_PATTERN).strip() or DEFAULT_PATTERN
+        clean_dbc_names = [str(name).strip() for name in (dbc_names or []) if str(name).strip()]
+        self.cancel_event.clear()
+        self.active_download_context = {}
+        self.status = self._initial_status()
+        await self._emit(
+            "info",
+            queued_message,
+            task_id=task_id,
+            operation=operation,
+            state="running",
+            phase="queued",
+            percent=0.0,
+            message="Queued",
+            template_name=clean_template,
+            pattern=clean_pattern,
+            source=source.public_dict() if source else {"mode": "local"},
+            dbc_names=clean_dbc_names,
+            started_at=_now_iso(),
+            finished_at=None,
+            cancel_requested=False,
+            error=None,
+        )
+        self.current_task = asyncio.create_task(runner(task_id))
+        return {"already_running": False, "status": self.get_status()}
+
+    async def start_list(
+        self,
+        pattern: str | None = None,
+        source_mode: str | None = None,
+        rpi_host: str | None = None,
+        rpi_user: str | None = None,
+        rpi_password: str | None = None,
+        remote_log_dir: str | None = None,
+    ) -> dict[str, Any]:
+        clean_pattern = (pattern or DEFAULT_PATTERN).strip() or DEFAULT_PATTERN
+        source = self._build_source(source_mode, rpi_host, rpi_user, rpi_password, remote_log_dir)
+        return await self._queue_operation(
+            "list",
+            "Queued CAN log file listing",
+            lambda task_id: self._run_list(task_id, clean_pattern, source),
+            pattern=clean_pattern,
+            source=source,
+        )
+
+    async def start_pull(
+        self,
+        pattern: str | None = None,
+        source_mode: str | None = None,
+        rpi_host: str | None = None,
+        rpi_user: str | None = None,
+        rpi_password: str | None = None,
+        remote_log_dir: str | None = None,
+        selected_relative_paths: list[str] | None = None,
+    ) -> dict[str, Any]:
+        clean_pattern = (pattern or DEFAULT_PATTERN).strip() or DEFAULT_PATTERN
+        source = self._build_source(source_mode, rpi_host, rpi_user, rpi_password, remote_log_dir)
+        clean_selected_paths = self._clean_selected_relative_paths(selected_relative_paths)
+        return await self._queue_operation(
+            "pull",
+            "Queued CAN log pull",
+            lambda task_id: self._run_pull(task_id, clean_pattern, source, clean_selected_paths),
+            pattern=clean_pattern,
+            source=source,
+        )
+
+    async def start_decode(
+        self,
+        template_name: str | None = None,
+        dbc_names: list[str] | None = None,
+        selected_relative_paths: list[str] | None = None,
+        output_folder_name: str | None = None,
+    ) -> dict[str, Any]:
+        clean_template = (template_name or "").strip() or None
+        clean_dbc_names = [str(name).strip() for name in (dbc_names or []) if str(name).strip()]
+        clean_selected_paths = self._clean_selected_relative_paths(selected_relative_paths)
+        clean_output_folder = self._clean_output_folder_name(output_folder_name)
+        return await self._queue_operation(
+            "decode",
+            "Queued CAN log decode",
+            lambda task_id: self._run_decode(task_id, clean_template, clean_dbc_names, clean_selected_paths, clean_output_folder),
+            template_name=clean_template,
+            dbc_names=clean_dbc_names,
+        )
+
     async def start(
         self,
         template_name: str | None = None,
@@ -190,39 +321,61 @@ class CANDecoderSyncService:
         rpi_password: str | None = None,
         remote_log_dir: str | None = None,
         dbc_names: list[str] | None = None,
+        selected_relative_paths: list[str] | None = None,
+        output_folder_name: str | None = None,
     ) -> dict[str, Any]:
-        if self.current_task and not self.current_task.done():
-            return {"already_running": True, "status": self.get_status()}
-
-        task_id = uuid.uuid4().hex[:12]
         clean_template = (template_name or "").strip() or None
         clean_pattern = (pattern or DEFAULT_PATTERN).strip() or DEFAULT_PATTERN
-        source = SourceConfig(
-            mode=(source_mode or "client").strip() or "client",
-            rpi_host=(rpi_host or "").strip(),
-            rpi_user=(rpi_user or "pi").strip() or "pi",
-            rpi_password=rpi_password or "",
-            remote_log_dir=(remote_log_dir or DEFAULT_REMOTE_LOG_DIR).strip() or DEFAULT_REMOTE_LOG_DIR,
-        )
+        source = self._build_source(source_mode, rpi_host, rpi_user, rpi_password, remote_log_dir)
         clean_dbc_names = [str(name).strip() for name in (dbc_names or []) if str(name).strip()]
-        self.status = self._initial_status()
-        await self._emit(
-            "info",
-            "Queued CAN log sync and decode",
-            task_id=task_id,
-            state="running",
-            phase="queued",
-            percent=0.0,
-            message="Queued",
+        clean_selected_paths = self._clean_selected_relative_paths(selected_relative_paths)
+        clean_output_folder = self._clean_output_folder_name(output_folder_name)
+        return await self._queue_operation(
+            "sync_decode",
+            "Queued CAN log pull and decode",
+            lambda task_id: self._run_sync_decode(
+                task_id,
+                clean_template,
+                clean_pattern,
+                source,
+                clean_dbc_names,
+                clean_selected_paths,
+                clean_output_folder,
+            ),
             template_name=clean_template,
             pattern=clean_pattern,
-            source=source.public_dict(),
+            source=source,
             dbc_names=clean_dbc_names,
-            started_at=_now_iso(),
-            error=None,
         )
-        self.current_task = asyncio.create_task(self._run(task_id, clean_template, clean_pattern, source, clean_dbc_names))
-        return {"already_running": False, "status": self.get_status()}
+
+    async def cancel(self) -> dict[str, Any]:
+        if not self.current_task or self.current_task.done():
+            return {"canceled": False, "status": self.get_status()}
+
+        self.cancel_event.set()
+        await self._emit(
+            "warning",
+            "Cancel requested",
+            state="canceling",
+            message="Canceling",
+            cancel_requested=True,
+        )
+
+        cancel_error = OperationCancelled("Operation canceled by user.")
+        for request_id, future in list(self.pending.items()):
+            self.pending.pop(request_id, None)
+            if not future.done():
+                future.set_exception(cancel_error)
+
+        download_ids = list(self.downloads.keys())
+        for request_id in download_ids:
+            session = self.downloads.get(request_id)
+            if session and not session.future.done():
+                session.future.set_exception(cancel_error)
+            await self._send_cancel_request(request_id)
+
+        self._close_active_ssh_client()
+        return {"canceled": True, "status": self.get_status()}
 
     async def handle_vehicle_message(self, data: dict[str, Any], client_id: str) -> bool:
         msg_type = data.get("type")
@@ -276,119 +429,46 @@ class CANDecoderSyncService:
             raise RuntimeError(f"Unknown DBC selection: {', '.join(missing)}")
         return [by_name[name] for name in dbc_names]
 
-    async def _run(
-        self,
-        task_id: str,
-        template_name: str | None,
-        pattern: str,
-        source: SourceConfig,
-        dbc_names: list[str],
-    ) -> None:
+    async def _run_operation(self, body: Callable[[], Awaitable[None]]) -> None:
         try:
-            if source.mode == "client" and not self.has_vehicle_client():
-                raise RuntimeError("No vehicle Raspberry Pi client is connected.")
-            if source.mode == "ssh":
-                self._validate_ssh_source(source)
-
-            suffix = safe_suffix(template_name)
-            folder_suffix = f"_{suffix}" if suffix else ""
-            raw_dir = WORKSPACE_DIR / f"undecoded{folder_suffix}"
-            decoded_dir = WORKSPACE_DIR / f"decoded{folder_suffix}"
-            raw_dir.mkdir(parents=True, exist_ok=True)
-            decoded_dir.mkdir(parents=True, exist_ok=True)
-            CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            folders = {
-                "workspace": str(WORKSPACE_DIR),
-                "undecoded": str(raw_dir),
-                "decoded": str(decoded_dir),
-                "cache": str(CACHE_DIR),
-            }
+            self._check_cancelled()
+            await body()
+        except OperationCancelled as exc:
             await self._emit(
-                "info",
-                "Prepared output folders",
-                phase="preparing",
-                percent=3.0,
-                message="Preparing folders",
-                folders=folders,
-            )
-
-            dbc_paths = self._resolve_dbc_paths(dbc_names)
-            if not dbc_paths:
-                raise RuntimeError(f"No DBC files found in {SERVER_DIR / 'dbc'}.")
-
-            selected = set()
-            if template_name:
-                selected = load_signal_template(template_name)
-                if not selected:
-                    raise RuntimeError(f"Template '{template_name}' has no configured signals.")
-
-            if source.mode == "ssh":
-                remote_files = await self._request_ssh_remote_list(source, pattern)
-            else:
-                remote_files = await self._request_remote_list(pattern)
-            remote_files = self._filter_remote_files(remote_files)
-            await self._emit(
-                "info",
-                f"Found {len(remote_files)} remote CSV log file(s)",
-                phase="listing",
-                percent=8.0,
-                message=f"Found {len(remote_files)} remote file(s)",
-                counts={**self.status["counts"], "remote_files": len(remote_files)},
-                progress={"remote_files": len(remote_files)},
-            )
-            if not remote_files:
-                raise RuntimeError(f"No remote CSV files matched pattern {pattern}.")
-
-            state = self._load_state()
-            downloaded, skipped = await self._sync_raw_files(remote_files, raw_dir, state, source)
-            self._write_state(state)
-
-            raw_files = [self._raw_path(raw_dir, entry) for entry in remote_files if self._raw_path(raw_dir, entry).exists()]
-            decoded, decode_skipped = await self._decode_raw_files(
-                raw_files=raw_files,
-                raw_dir=raw_dir,
-                decoded_dir=decoded_dir,
-                dbc_paths=dbc_paths,
-                selected=selected,
-            )
-
-            manifest = {
-                "task_id": task_id,
-                "created_at": _now_iso(),
-                "template_name": template_name,
-                "pattern": pattern,
-                "source": source.public_dict(),
-                "folders": folders,
-                "dbc_paths": [str(path) for path in dbc_paths],
-                "remote_files": remote_files,
-                "downloaded_files": downloaded,
-                "download_skipped": skipped,
-                "decoded_files": [row.get("output") for row in decoded],
-                "decode_skipped": decode_skipped,
-                "stats": decoded,
-            }
-            manifest_path = WORKSPACE_DIR / f"manifest{folder_suffix}.json"
-            manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-
-            final_counts = {
-                **self.status["counts"],
-                "downloaded": len(downloaded),
-                "download_skipped": len(skipped),
-                "decoded": len(decoded),
-                "decode_skipped": decode_skipped,
-            }
-            await self._emit(
-                "success",
-                "CAN decoder sync complete",
-                state="succeeded",
-                phase="complete",
-                percent=100.0,
-                message="Complete",
+                "warning",
+                str(exc),
+                state="canceled",
+                phase="canceled",
+                percent=self.status.get("percent", 0.0),
+                message="Canceled",
+                error=None,
                 finished_at=_now_iso(),
-                counts=final_counts,
-                progress={"manifest": str(manifest_path)},
+            )
+        except asyncio.CancelledError:
+            self.cancel_event.set()
+            await self._emit(
+                "warning",
+                "Operation canceled by user.",
+                state="canceled",
+                phase="canceled",
+                percent=self.status.get("percent", 0.0),
+                message="Canceled",
+                error=None,
+                finished_at=_now_iso(),
             )
         except Exception as exc:
+            if self.cancel_event.is_set():
+                await self._emit(
+                    "warning",
+                    "Operation canceled by user.",
+                    state="canceled",
+                    phase="canceled",
+                    percent=self.status.get("percent", 0.0),
+                    message="Canceled",
+                    error=None,
+                    finished_at=_now_iso(),
+                )
+                return
             await self._emit(
                 "error",
                 str(exc),
@@ -398,8 +478,438 @@ class CANDecoderSyncService:
                 error=str(exc),
                 finished_at=_now_iso(),
             )
+        finally:
+            self.active_download_context = {}
+            self._close_active_ssh_client()
+            self.cancel_event.clear()
+
+    async def _run_list(self, task_id: str, pattern: str, source: SourceConfig) -> None:
+        async def body() -> None:
+            self._validate_source_ready(source)
+            remote_files = await self._list_remote_files(source, pattern, found_percent=95.0)
+            manifest_path = self._write_manifest(
+                "manifest_list.json",
+                {
+                    "task_id": task_id,
+                    "operation": "list",
+                    "created_at": _now_iso(),
+                    "pattern": pattern,
+                    "source": source.public_dict(),
+                    "remote_files": remote_files,
+                },
+            )
+            await self._emit(
+                "success",
+                f"Listed {len(remote_files)} remote CSV log file(s)",
+                state="succeeded",
+                phase="complete",
+                percent=100.0,
+                message="List complete",
+                finished_at=_now_iso(),
+                counts={**self.status["counts"], "remote_files": len(remote_files)},
+                remote_files=remote_files,
+                progress={"remote_files": len(remote_files), "manifest": str(manifest_path)},
+            )
+
+        await self._run_operation(body)
+
+    async def _run_pull(
+        self,
+        task_id: str,
+        pattern: str,
+        source: SourceConfig,
+        selected_relative_paths: list[str],
+    ) -> None:
+        async def body() -> None:
+            self._validate_source_ready(source)
+            raw_dir, decoded_dir, folders, _ = await self._prepare_folders(None)
+            remote_files = await self._list_remote_files(source, pattern, found_percent=8.0)
+            remote_files = await self._apply_pull_selection(remote_files, selected_relative_paths)
+            if not remote_files:
+                raise RuntimeError("No remote CSV files matched the selected files.")
+
+            state = self._load_state()
+            downloaded, skipped = await self._sync_raw_files(remote_files, raw_dir, state, source, percent_end=100.0)
+            self._check_cancelled()
+            self._write_state(state)
+
+            manifest_path = self._write_manifest(
+                "manifest_pull.json",
+                {
+                    "task_id": task_id,
+                    "operation": "pull",
+                    "created_at": _now_iso(),
+                    "pattern": pattern,
+                    "source": source.public_dict(),
+                    "selected_relative_paths": selected_relative_paths,
+                    "folders": folders,
+                    "remote_files": remote_files,
+                    "downloaded_files": downloaded,
+                    "download_skipped": skipped,
+                },
+            )
+            await self._emit(
+                "success",
+                "CAN log pull complete",
+                state="succeeded",
+                phase="complete",
+                percent=100.0,
+                message="Pull complete",
+                finished_at=_now_iso(),
+                counts={
+                    **self.status["counts"],
+                    "downloaded": len(downloaded),
+                    "download_skipped": len(skipped),
+                },
+                folders=folders,
+                remote_files=remote_files,
+                local_raw_files=[str(self._raw_path(raw_dir, entry)) for entry in remote_files if self._raw_path(raw_dir, entry).exists()],
+                progress={"manifest": str(manifest_path), "decoded_folder": str(decoded_dir)},
+            )
+
+        await self._run_operation(body)
+
+    async def _run_decode(
+        self,
+        task_id: str,
+        template_name: str | None,
+        dbc_names: list[str],
+        selected_relative_paths: list[str],
+        output_folder_name: str | None,
+    ) -> None:
+        async def body() -> None:
+            raw_dir, decoded_dir, folders, folder_suffix = await self._prepare_folders(template_name, output_folder_name)
+            dbc_paths, selected = self._prepare_decode_inputs(template_name, dbc_names)
+            raw_files = self._selected_raw_files(raw_dir, selected_relative_paths)
+            await self._emit(
+                "info",
+                f"Selected {len(raw_files)} local raw CSV file(s)",
+                phase="preparing",
+                percent=5.0,
+                message=f"Selected {len(raw_files)} local raw file(s)",
+                folders=folders,
+                local_raw_files=[str(path) for path in raw_files],
+                progress={"local_raw_files": len(raw_files)},
+            )
+            if not raw_files:
+                raise RuntimeError("Select at least one pulled CSV file before decoding.")
+
+            decoded, decode_skipped = await self._decode_raw_files(
+                raw_files=raw_files,
+                raw_dir=raw_dir,
+                decoded_dir=decoded_dir,
+                dbc_paths=dbc_paths,
+                selected=selected,
+                percent_start=5.0,
+                percent_end=100.0,
+            )
+            manifest_path = self._write_manifest(
+                f"manifest_decode{folder_suffix}.json",
+                {
+                    "task_id": task_id,
+                    "operation": "decode",
+                    "created_at": _now_iso(),
+                    "template_name": template_name,
+                    "output_folder_name": output_folder_name,
+                    "selected_relative_paths": selected_relative_paths,
+                    "folders": folders,
+                    "dbc_paths": [str(path) for path in dbc_paths],
+                    "raw_files": [str(path) for path in raw_files],
+                    "decoded_files": [row.get("output") for row in decoded],
+                    "decode_skipped": decode_skipped,
+                    "stats": decoded,
+                },
+            )
+            await self._emit(
+                "success",
+                "CAN log decode complete",
+                state="succeeded",
+                phase="complete",
+                percent=100.0,
+                message="Decode complete",
+                finished_at=_now_iso(),
+                counts={**self.status["counts"], "decoded": len(decoded), "decode_skipped": decode_skipped},
+                folders=folders,
+                progress={"manifest": str(manifest_path)},
+            )
+
+        await self._run_operation(body)
+
+    async def _run_sync_decode(
+        self,
+        task_id: str,
+        template_name: str | None,
+        pattern: str,
+        source: SourceConfig,
+        dbc_names: list[str],
+        selected_relative_paths: list[str],
+        output_folder_name: str | None,
+    ) -> None:
+        async def body() -> None:
+            self._validate_source_ready(source)
+            raw_dir, decoded_dir, folders, folder_suffix = await self._prepare_folders(template_name, output_folder_name)
+            dbc_paths, selected = self._prepare_decode_inputs(template_name, dbc_names)
+
+            remote_files = await self._list_remote_files(source, pattern, found_percent=8.0)
+            remote_files = await self._apply_pull_selection(remote_files, selected_relative_paths)
+            if not remote_files:
+                raise RuntimeError("No remote CSV files matched the selected files.")
+
+            state = self._load_state()
+            downloaded, skipped = await self._sync_raw_files(remote_files, raw_dir, state, source, percent_end=55.0)
+            self._check_cancelled()
+            self._write_state(state)
+
+            raw_files = [self._raw_path(raw_dir, entry) for entry in remote_files if self._raw_path(raw_dir, entry).exists()]
+            decoded, decode_skipped = await self._decode_raw_files(
+                raw_files=raw_files,
+                raw_dir=raw_dir,
+                decoded_dir=decoded_dir,
+                dbc_paths=dbc_paths,
+                selected=selected,
+                percent_start=55.0,
+                percent_end=100.0,
+            )
+
+            manifest_path = self._write_manifest(
+                f"manifest{folder_suffix}.json",
+                {
+                    "task_id": task_id,
+                    "operation": "sync_decode",
+                    "created_at": _now_iso(),
+                    "template_name": template_name,
+                    "output_folder_name": output_folder_name,
+                    "pattern": pattern,
+                    "source": source.public_dict(),
+                    "selected_relative_paths": selected_relative_paths,
+                    "folders": folders,
+                    "dbc_paths": [str(path) for path in dbc_paths],
+                    "remote_files": remote_files,
+                    "downloaded_files": downloaded,
+                    "download_skipped": skipped,
+                    "decoded_files": [row.get("output") for row in decoded],
+                    "decode_skipped": decode_skipped,
+                    "stats": decoded,
+                },
+            )
+            await self._emit(
+                "success",
+                "CAN decoder pull and decode complete",
+                state="succeeded",
+                phase="complete",
+                percent=100.0,
+                message="Complete",
+                finished_at=_now_iso(),
+                counts={
+                    **self.status["counts"],
+                    "downloaded": len(downloaded),
+                    "download_skipped": len(skipped),
+                    "decoded": len(decoded),
+                    "decode_skipped": decode_skipped,
+                },
+                folders=folders,
+                remote_files=remote_files,
+                progress={"manifest": str(manifest_path)},
+            )
+
+        await self._run_operation(body)
+
+    def _check_cancelled(self) -> None:
+        if self.cancel_event.is_set():
+            raise OperationCancelled("Operation canceled by user.")
+
+    def _set_active_ssh_client(self, client: Any | None) -> None:
+        with self.active_ssh_lock:
+            self.active_ssh_client = client
+
+    def _close_active_ssh_client(self) -> None:
+        with self.active_ssh_lock:
+            client = self.active_ssh_client
+            self.active_ssh_client = None
+        if client:
+            try:
+                client.close()
+            except Exception:
+                pass
+
+    async def _send_cancel_request(self, request_id: str) -> None:
+        if not request_id:
+            return
+        try:
+            await self._send_or_raise({"type": "candecoder_cancel_request", "request_id": request_id})
+        except Exception:
+            pass
+
+    def _validate_source_ready(self, source: SourceConfig) -> None:
+        self._check_cancelled()
+        self._validate_ssh_source(source)
+
+    def _clean_output_folder_name(self, value: str | None) -> str | None:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        clean = safe_suffix(text)
+        if not clean:
+            raise RuntimeError("Decode output folder name contains no usable characters.")
+        return clean
+
+    async def _prepare_folders(
+        self,
+        template_name: str | None,
+        output_folder_name: str | None = None,
+    ) -> tuple[Path, Path, dict[str, str], str]:
+        self._check_cancelled()
+        suffix = self._clean_output_folder_name(output_folder_name) or safe_suffix(template_name)
+        folder_suffix = f"_{suffix}" if suffix else ""
+        raw_dir = WORKSPACE_DIR / "undecoded"
+        decoded_dir = WORKSPACE_DIR / f"decoded{folder_suffix}"
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        decoded_dir.mkdir(parents=True, exist_ok=True)
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        folders = {
+            "workspace": str(WORKSPACE_DIR),
+            "undecoded": str(raw_dir),
+            "decoded": str(decoded_dir),
+            "cache": str(CACHE_DIR),
+        }
+        await self._emit(
+            "info",
+            "Prepared output folders",
+            phase="preparing",
+            percent=3.0,
+            message="Preparing folders",
+            folders=folders,
+        )
+        return raw_dir, decoded_dir, folders, folder_suffix
+
+    def _prepare_decode_inputs(
+        self,
+        template_name: str | None,
+        dbc_names: list[str],
+    ) -> tuple[list[Path], set[tuple[int, str]]]:
+        self._check_cancelled()
+        dbc_paths = self._resolve_dbc_paths(dbc_names)
+        if not dbc_paths:
+            raise RuntimeError(f"No DBC files found in {SERVER_DIR / 'dbc'}.")
+
+        selected: set[tuple[int, str]] = set()
+        if template_name:
+            selected = load_signal_template(template_name)
+            if not selected:
+                raise RuntimeError(f"Template '{template_name}' has no configured signals.")
+        return dbc_paths, selected
+
+    def _discover_raw_files(self, raw_dir: Path) -> list[Path]:
+        self._check_cancelled()
+        if not raw_dir.exists():
+            return []
+        return sorted(
+            [
+                path
+                for path in raw_dir.rglob("*.csv")
+                if path.is_file() and not path.name.lower().endswith("_decoded.csv")
+            ],
+            key=lambda path: str(path.relative_to(raw_dir)).lower(),
+        )
+
+    def _selected_raw_files(self, raw_dir: Path, selected_relative_paths: list[str]) -> list[Path]:
+        self._check_cancelled()
+        if not selected_relative_paths:
+            return []
+        raw_files: list[Path] = []
+        missing: list[str] = []
+        seen: set[str] = set()
+        for relative_path in selected_relative_paths:
+            self._check_cancelled()
+            safe_path = safe_local_relative_path(relative_path)
+            raw_path = raw_dir / safe_path
+            key = str(safe_path).replace("\\", "/").lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            if not raw_path.exists() or not raw_path.is_file():
+                missing.append(relative_path)
+                continue
+            if not raw_path.name.lower().endswith(".csv") or raw_path.name.lower().endswith("_decoded.csv"):
+                continue
+            raw_files.append(raw_path)
+        if missing:
+            preview = ", ".join(missing[:5])
+            suffix = "..." if len(missing) > 5 else ""
+            raise RuntimeError(f"Selected file(s) have not been pulled yet: {preview}{suffix}")
+        return sorted(raw_files, key=lambda path: str(path.relative_to(raw_dir)).lower())
+
+    def _clean_selected_relative_paths(self, paths: list[str] | None) -> list[str]:
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for raw_path in paths or []:
+            text = str(raw_path or "").replace("\\", "/").strip()
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            cleaned.append(text)
+        return cleaned
+
+    async def _apply_pull_selection(
+        self,
+        remote_files: list[dict[str, Any]],
+        selected_relative_paths: list[str],
+    ) -> list[dict[str, Any]]:
+        selected_set = set(selected_relative_paths)
+        filtered = remote_files
+        selection_note = "all listed files"
+
+        if selected_set:
+            filtered = [
+                row
+                for row in remote_files
+                if str(row.get("relative_path") or row.get("name") or "").replace("\\", "/") in selected_set
+            ]
+            selection_note = f"{len(filtered)} selected file(s)"
+
+        await self._emit(
+            "info",
+            f"Pull selection: {selection_note}",
+            phase="selecting",
+            percent=9.0,
+            message="Selecting files",
+            counts={**self.status["counts"], "remote_files": len(filtered)},
+            remote_files=filtered,
+            progress={"remote_files": len(filtered), "selection": selection_note},
+        )
+        return filtered
+
+    def _write_manifest(self, filename: str, manifest: dict[str, Any]) -> Path:
+        self._check_cancelled()
+        WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
+        manifest_path = WORKSPACE_DIR / filename
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+        return manifest_path
+
+    async def _list_remote_files(
+        self,
+        source: SourceConfig,
+        pattern: str,
+        found_percent: float,
+    ) -> list[dict[str, Any]]:
+        self._check_cancelled()
+        remote_files = await self._request_ssh_remote_list(source, pattern)
+        self._check_cancelled()
+        remote_files = self._filter_remote_files(remote_files)
+        await self._emit(
+            "info",
+            f"Found {len(remote_files)} remote CSV log file(s)",
+            phase="listing",
+            percent=found_percent,
+            message=f"Found {len(remote_files)} remote file(s)",
+            counts={**self.status["counts"], "remote_files": len(remote_files)},
+            remote_files=remote_files,
+            progress={"remote_files": len(remote_files)},
+        )
+        return remote_files
 
     async def _request_ssh_remote_list(self, source: SourceConfig, pattern: str) -> list[dict[str, Any]]:
+        self._check_cancelled()
         await self._emit(
             "info",
             f"Connecting to RPI {source.rpi_host}",
@@ -411,9 +921,11 @@ class CANDecoderSyncService:
 
     def _list_ssh_remote_files_sync(self, source: SourceConfig, pattern: str) -> list[dict[str, Any]]:
         self._validate_ssh_source(source)
+        self._check_cancelled()
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         root = source.remote_log_dir.rstrip("/") or "."
+        self._set_active_ssh_client(client)
         try:
             client.connect(
                 hostname=source.rpi_host,
@@ -429,7 +941,9 @@ class CANDecoderSyncService:
                 entries: list[dict[str, Any]] = []
 
                 def walk(remote_dir: str) -> None:
+                    self._check_cancelled()
                     for attr in sftp.listdir_attr(remote_dir):
+                        self._check_cancelled()
                         remote_path = posixpath.join(remote_dir.rstrip("/"), attr.filename)
                         if stat.S_ISDIR(attr.st_mode):
                             walk(remote_path)
@@ -453,9 +967,11 @@ class CANDecoderSyncService:
                 entries.sort(key=lambda row: str(row["relative_path"]).lower())
                 return entries
         finally:
+            self._set_active_ssh_client(None)
             client.close()
 
     async def _request_remote_list(self, pattern: str) -> list[dict[str, Any]]:
+        self._check_cancelled()
         request_id = uuid.uuid4().hex
         loop = asyncio.get_running_loop()
         future = loop.create_future()
@@ -469,7 +985,11 @@ class CANDecoderSyncService:
             }
         )
         await self._emit("info", "Requested remote log list", phase="listing", percent=5.0, message="Listing remote logs")
-        response = await asyncio.wait_for(future, timeout=90)
+        try:
+            response = await asyncio.wait_for(future, timeout=90)
+        finally:
+            self.pending.pop(request_id, None)
+        self._check_cancelled()
         files = response.get("files", [])
         return files if isinstance(files, list) else []
 
@@ -479,12 +999,20 @@ class CANDecoderSyncService:
         raw_dir: Path,
         state: dict[str, Any],
         source: SourceConfig,
+        percent_end: float = 55.0,
     ) -> tuple[list[str], list[str]]:
         to_download: list[dict[str, Any]] = []
         skipped: list[str] = []
         for entry in remote_files:
-            if self._cache_is_current(entry, state):
+            self._check_cancelled()
+            if self._raw_is_current(entry, raw_dir):
+                raw_path = self._raw_path(raw_dir, entry)
+                self._ensure_cache_from_raw(entry, raw_path)
+                self._record_synced_file(state, entry)
+                skipped.append(str(entry["relative_path"]))
+            elif self._cache_is_current(entry, state):
                 self._copy_cache_to_raw(entry, raw_dir)
+                self._record_synced_file(state, entry)
                 skipped.append(str(entry["relative_path"]))
             else:
                 to_download.append(entry)
@@ -498,7 +1026,7 @@ class CANDecoderSyncService:
                 "info",
                 "All remote logs already exist locally",
                 phase="downloading",
-                percent=55.0,
+                percent=percent_end,
                 message="No new downloads",
                 counts={**self.status["counts"], "download_skipped": len(skipped)},
                 progress={"downloaded": 0, "skipped": len(skipped), "total_bytes": total_bytes},
@@ -521,27 +1049,24 @@ class CANDecoderSyncService:
                 "total_files": len(to_download),
                 "total_bytes": total_bytes,
                 "bytes_before": copied_before,
+                "percent_start": 10.0,
+                "percent_end": percent_end,
             }
+            self._check_cancelled()
             if source.mode == "ssh":
                 cache_path = await self._download_ssh_file(entry, source)
             else:
                 cache_path = await self._download_file(entry)
+            self._check_cancelled()
             copied_before += cache_path.stat().st_size if cache_path.exists() else int(entry.get("size") or 0)
-            state.setdefault("files", {})[str(entry["relative_path"])] = {
-                "relative_path": entry["relative_path"],
-                "remote_path": entry.get("path"),
-                "size": int(entry.get("size") or 0),
-                "mtime": float(entry.get("mtime") or 0),
-                "cache_path": str(cache_path),
-                "synced_at": _now_iso(),
-            }
+            self._record_synced_file(state, entry, cache_path)
             raw_path = self._copy_cache_to_raw(entry, raw_dir)
             downloaded.append(str(raw_path))
             await self._emit(
                 "info",
                 f"Downloaded {entry['name']}",
                 phase="downloading",
-                percent=self._download_percent(copied_before, total_bytes),
+                percent=self._download_percent(copied_before, total_bytes, 10.0, percent_end),
                 message=f"Downloading {file_index}/{len(to_download)}",
                 counts={**self.status["counts"], "downloaded": len(downloaded), "download_skipped": len(skipped)},
                 progress={
@@ -558,6 +1083,7 @@ class CANDecoderSyncService:
         return downloaded, skipped
 
     async def _download_ssh_file(self, entry: dict[str, Any], source: SourceConfig) -> Path:
+        self._check_cancelled()
         final_path = self._cache_path(entry)
         temp_path = final_path.with_name(f"{final_path.name}.{uuid.uuid4().hex}.part")
         final_path.parent.mkdir(parents=True, exist_ok=True)
@@ -579,6 +1105,7 @@ class CANDecoderSyncService:
         loop: asyncio.AbstractEventLoop,
     ) -> Path:
         self._validate_ssh_source(source)
+        self._check_cancelled()
         remote_path = str(entry.get("path") or "")
         expected_size = int(entry.get("size") or 0)
         remote_mtime = float(entry.get("mtime") or 0)
@@ -587,8 +1114,12 @@ class CANDecoderSyncService:
         last_emit = {"at": 0.0, "bytes": -1}
         total_bytes = int(self.active_download_context.get("total_bytes") or 0)
         bytes_before = int(self.active_download_context.get("bytes_before") or 0)
+        percent_start = float(self.active_download_context.get("percent_start") or 10.0)
+        percent_end = float(self.active_download_context.get("percent_end") or 55.0)
+        self._set_active_ssh_client(client)
 
         def on_progress(transferred: int, file_total: int) -> None:
+            self._check_cancelled()
             now = time.monotonic()
             known_total = int(file_total or expected_size)
             if transferred != known_total and now - last_emit["at"] < 0.35:
@@ -602,7 +1133,7 @@ class CANDecoderSyncService:
                 "info",
                 f"Downloading {entry['name']}",
                 phase="downloading",
-                percent=self._download_percent(bytes_before + transferred, total_bytes),
+                percent=self._download_percent(bytes_before + transferred, total_bytes, percent_start, percent_end),
                 message=f"Downloading {self.active_download_context.get('file_index', 0)}/{self.active_download_context.get('total_files', 0)}",
                 progress={
                     "current_file": entry["name"],
@@ -626,7 +1157,16 @@ class CANDecoderSyncService:
                 allow_agent=False,
             )
             with client.open_sftp() as sftp:
-                sftp.get(remote_path, str(temp_path), callback=on_progress)
+                transferred = 0
+                with sftp.open(remote_path, "rb") as remote_handle, temp_path.open("wb") as local_handle:
+                    while True:
+                        self._check_cancelled()
+                        chunk = remote_handle.read(CHUNK_SIZE)
+                        if not chunk:
+                            break
+                        local_handle.write(chunk)
+                        transferred += len(chunk)
+                        on_progress(transferred, expected_size)
             if expected_size and temp_path.stat().st_size != expected_size:
                 raise RuntimeError(f"Incomplete transfer for {entry['name']}: {temp_path.stat().st_size}/{expected_size} bytes")
             if final_path.exists():
@@ -636,9 +1176,11 @@ class CANDecoderSyncService:
                 os.utime(final_path, (remote_mtime, remote_mtime))
             return final_path
         finally:
+            self._set_active_ssh_client(None)
             client.close()
 
     async def _download_file(self, entry: dict[str, Any]) -> Path:
+        self._check_cancelled()
         request_id = uuid.uuid4().hex
         relative_path = str(entry["relative_path"])
         final_path = self._cache_path(entry)
@@ -670,7 +1212,13 @@ class CANDecoderSyncService:
         timeout = max(300.0, session.expected_size / max(CHUNK_SIZE, 1) * 20.0)
         cleanup_temp = False
         try:
-            return await asyncio.wait_for(future, timeout=timeout)
+            result = await asyncio.wait_for(future, timeout=timeout)
+            self._check_cancelled()
+            return result
+        except OperationCancelled:
+            cleanup_temp = True
+            await self._send_cancel_request(request_id)
+            raise
         except Exception:
             cleanup_temp = True
             raise
@@ -682,6 +1230,10 @@ class CANDecoderSyncService:
     async def _handle_file_chunk(self, request_id: str, data: dict[str, Any]) -> None:
         session = self.downloads.get(request_id)
         if not session:
+            return
+        if self.cancel_event.is_set():
+            if not session.future.done():
+                session.future.set_exception(OperationCancelled("Operation canceled by user."))
             return
         try:
             offset = int(data.get("offset") or 0)
@@ -697,11 +1249,13 @@ class CANDecoderSyncService:
                 session.last_emit = now
                 total_bytes = int(self.active_download_context.get("total_bytes") or 0)
                 bytes_before = int(self.active_download_context.get("bytes_before") or 0)
+                percent_start = float(self.active_download_context.get("percent_start") or 10.0)
+                percent_end = float(self.active_download_context.get("percent_end") or 55.0)
                 await self._emit(
                     "info",
                     f"Receiving {Path(session.relative_path).name}",
                     phase="downloading",
-                    percent=self._download_percent(bytes_before + session.received, total_bytes),
+                    percent=self._download_percent(bytes_before + session.received, total_bytes, percent_start, percent_end),
                     message=f"Downloading {self.active_download_context.get('file_index', 0)}/{self.active_download_context.get('total_files', 0)}",
                     progress={
                         "current_file": Path(session.relative_path).name,
@@ -719,6 +1273,10 @@ class CANDecoderSyncService:
     async def _handle_file_complete(self, request_id: str, data: dict[str, Any]) -> None:
         session = self.downloads.get(request_id)
         if not session:
+            return
+        if self.cancel_event.is_set():
+            if not session.future.done():
+                session.future.set_exception(OperationCancelled("Operation canceled by user."))
             return
         try:
             expected = int(data.get("size") or session.expected_size or 0)
@@ -742,7 +1300,10 @@ class CANDecoderSyncService:
         decoded_dir: Path,
         dbc_paths: list[Path],
         selected: set[tuple[int, str]],
+        percent_start: float = 55.0,
+        percent_end: float = 100.0,
     ) -> tuple[list[dict[str, Any]], int]:
+        self._check_cancelled()
         if not raw_files:
             raise RuntimeError("No local raw CSV files are available to decode.")
         loop = asyncio.get_running_loop()
@@ -753,6 +1314,8 @@ class CANDecoderSyncService:
             decoded_dir,
             dbc_paths,
             selected,
+            percent_start,
+            percent_end,
             loop,
         )
 
@@ -763,12 +1326,15 @@ class CANDecoderSyncService:
         decoded_dir: Path,
         dbc_paths: list[Path],
         selected: set[tuple[int, str]],
+        percent_start: float,
+        percent_end: float,
         loop: asyncio.AbstractEventLoop,
     ) -> tuple[list[dict[str, Any]], int]:
         decoded: list[dict[str, Any]] = []
         skipped = 0
         total_files = len(raw_files)
         for file_index, raw_file in enumerate(raw_files, start=1):
+            self._check_cancelled()
             relative = raw_file.relative_to(raw_dir)
             output_file = decoded_dir / relative.with_name(f"{relative.stem}_decoded.csv")
             if output_file.exists() and output_file.stat().st_mtime >= raw_file.stat().st_mtime:
@@ -778,7 +1344,7 @@ class CANDecoderSyncService:
                     "info",
                     f"Decode already current for {raw_file.name}",
                     phase="decoding",
-                    percent=self._decode_percent(file_index, total_files, 1.0),
+                    percent=self._decode_percent(file_index, total_files, 1.0, percent_start, percent_end),
                     message=f"Decoding {file_index}/{total_files}",
                     counts={**self.status["counts"], "decode_skipped": skipped},
                     progress={"current_file": raw_file.name, "skipped": True},
@@ -788,6 +1354,7 @@ class CANDecoderSyncService:
             last_emit = {"at": 0.0, "rows": -1}
 
             def on_progress(current_rows: int, total_rows: int, decoded_rows: int) -> None:
+                self._check_cancelled()
                 now = time.monotonic()
                 if current_rows != total_rows and now - last_emit["at"] < 0.35:
                     return
@@ -801,7 +1368,7 @@ class CANDecoderSyncService:
                     "info",
                     f"Decoding {raw_file.name}",
                     phase="decoding",
-                    percent=self._decode_percent(file_index, total_files, fraction),
+                    percent=self._decode_percent(file_index, total_files, fraction, percent_start, percent_end),
                     message=f"Decoding {file_index}/{total_files}",
                     progress={
                         "current_file": raw_file.name,
@@ -811,14 +1378,15 @@ class CANDecoderSyncService:
                     },
                 )
 
-            stats = decode_selected_signals(raw_file, output_file, dbc_paths, selected, on_progress)
+            stats = decode_selected_signals(raw_file, output_file, dbc_paths, selected, on_progress, self._check_cancelled)
+            self._check_cancelled()
             decoded.append(stats)
             self._emit_from_thread(
                 loop,
                 "info",
                 f"Decoded {raw_file.name}",
                 phase="decoding",
-                percent=self._decode_percent(file_index, total_files, 1.0),
+                percent=self._decode_percent(file_index, total_files, 1.0, percent_start, percent_end),
                 message=f"Decoding {file_index}/{total_files}",
                 counts={**self.status["counts"], "decoded": len(decoded), "decode_skipped": skipped},
                 progress={
@@ -829,8 +1397,8 @@ class CANDecoderSyncService:
             )
         return decoded, skipped
 
-    def _emit_from_thread(self, loop: asyncio.AbstractEventLoop, level: str, message: str, **updates: Any) -> None:
-        future = asyncio.run_coroutine_threadsafe(self._emit(level, message, **updates), loop)
+    def _emit_from_thread(self, loop: asyncio.AbstractEventLoop, level: str, event_message: str, **updates: Any) -> None:
+        future = asyncio.run_coroutine_threadsafe(self._emit(level, event_message, **updates), loop)
         try:
             future.result(timeout=2)
         except Exception:
@@ -919,24 +1487,70 @@ class CANDecoderSyncService:
         same_mtime = int(float(record.get("mtime") or 0)) == int(float(entry.get("mtime") or 0))
         return same_size and same_mtime
 
+    def _path_matches_remote(self, path: Path, entry: dict[str, Any]) -> bool:
+        if not path.exists() or not path.is_file():
+            return False
+        expected_size = int(entry.get("size") or 0)
+        if expected_size and path.stat().st_size != expected_size:
+            return False
+        remote_mtime = float(entry.get("mtime") or 0)
+        if remote_mtime:
+            return int(path.stat().st_mtime) == int(remote_mtime)
+        return True
+
+    def _raw_is_current(self, entry: dict[str, Any], raw_dir: Path) -> bool:
+        return self._path_matches_remote(self._raw_path(raw_dir, entry), entry)
+
+    def _ensure_cache_from_raw(self, entry: dict[str, Any], raw_path: Path) -> Path:
+        cache_path = self._cache_path(entry)
+        if self._path_matches_remote(cache_path, entry):
+            return cache_path
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(raw_path, cache_path)
+        return cache_path
+
+    def _record_synced_file(self, state: dict[str, Any], entry: dict[str, Any], cache_path: Path | None = None) -> None:
+        resolved_cache_path = cache_path or self._cache_path(entry)
+        state.setdefault("files", {})[str(entry["relative_path"])] = {
+            "relative_path": entry["relative_path"],
+            "remote_path": entry.get("path"),
+            "size": int(entry.get("size") or 0),
+            "mtime": float(entry.get("mtime") or 0),
+            "cache_path": str(resolved_cache_path),
+            "synced_at": _now_iso(),
+        }
+
     def _copy_cache_to_raw(self, entry: dict[str, Any], raw_dir: Path) -> Path:
         source = self._cache_path(entry)
         destination = self._raw_path(raw_dir, entry)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        expected_size = int(entry.get("size") or 0)
-        if destination.exists() and (not expected_size or destination.stat().st_size == expected_size):
+        if self._path_matches_remote(destination, entry):
             return destination
         shutil.copy2(source, destination)
         return destination
 
-    def _download_percent(self, copied_bytes: int, total_bytes: int) -> float:
+    def _download_percent(
+        self,
+        copied_bytes: int,
+        total_bytes: int,
+        percent_start: float = 10.0,
+        percent_end: float = 55.0,
+    ) -> float:
         if total_bytes <= 0:
-            return 55.0
-        return round(10.0 + min(1.0, max(0.0, copied_bytes / total_bytes)) * 45.0, 1)
+            return percent_end
+        span = percent_end - percent_start
+        return round(percent_start + min(1.0, max(0.0, copied_bytes / total_bytes)) * span, 1)
 
-    def _decode_percent(self, file_index: int, total_files: int, fraction: float) -> float:
+    def _decode_percent(
+        self,
+        file_index: int,
+        total_files: int,
+        fraction: float,
+        percent_start: float = 55.0,
+        percent_end: float = 100.0,
+    ) -> float:
         if total_files <= 0:
-            return 100.0
+            return percent_end
         completed_before = max(0, file_index - 1)
         overall = (completed_before + min(1.0, max(0.0, fraction))) / total_files
-        return round(55.0 + overall * 45.0, 1)
+        return round(percent_start + overall * (percent_end - percent_start), 1)

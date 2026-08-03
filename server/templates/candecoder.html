@@ -15,6 +15,10 @@
             <div>
                 <p class="text-xs font-semibold uppercase tracking-[0.24em] text-sky-400">NTURT Remote Monitor</p>
                 <h1 class="mt-2 text-3xl font-bold tracking-tight text-white">CAN Log Decoder</h1>
+                <div class="header-actions">
+                    <a href="/">Home</a>
+                    <a href="/adminshell/logout">Logout</a>
+                </div>
             </div>
             <div class="status-strip">
                 <div>
@@ -38,18 +42,13 @@
                     <span>Decode Setup</span>
                 </div>
 
-                <label class="field">
-                    <span>Source</span>
-                    <select id="sourceMode">
-                        <option value="ssh" selected>SSH/SFTP by RPI IP</option>
-                        <option value="client">Connected vehicle client</option>
-                    </select>
-                </label>
+                <input id="sourceMode" type="hidden" value="ssh">
 
                 <div id="sshFields" class="source-fields">
                     <label class="field">
                         <span>RPI IP / Host</span>
-                        <input id="rpiHostInput" type="text" placeholder="100.x.x.x or 192.168.x.x" autocomplete="off">
+                        <input id="rpiHostInput" type="text" list="rpiHostHistory" placeholder="100.x.x.x or 192.168.x.x" autocomplete="off">
+                        <datalist id="rpiHostHistory"></datalist>
                     </label>
 
                     <div class="two-col">
@@ -74,6 +73,11 @@
                     <select id="templateSelect">
                         <option value="">All DBC signals</option>
                     </select>
+                </label>
+
+                <label class="field">
+                    <span>Decode Output Folder</span>
+                    <input id="decodeFolderInput" type="text" autocomplete="off" placeholder="run_001">
                 </label>
 
                 <details id="templateManager" class="template-manager">
@@ -131,10 +135,12 @@
                     <div id="dbcList" class="dbc-list"></div>
                 </div>
 
-                <button id="startButton" class="primary-action" type="button">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
-                    <span>Sync And Decode</span>
-                </button>
+                <div class="action-grid">
+                    <button id="listButton" class="secondary-action" type="button">Refresh List</button>
+                    <button id="pullButton" class="primary-action" type="button">Pull Data</button>
+                    <button id="decodeButton" class="primary-action" type="button">Decode Data</button>
+                    <button id="cancelButton" class="secondary-action danger" type="button" disabled>Cancel</button>
+                </div>
 
                 <div class="folder-list">
                     <div>
@@ -182,6 +188,20 @@
                     <div>
                         <span>Transfer</span>
                         <strong id="transferLabel">-</strong>
+                    </div>
+                </div>
+
+                <div class="remote-file-panel">
+                    <div class="remote-file-heading">
+                        <span>File Selection</span>
+                        <div class="remote-file-actions">
+                            <button id="selectVisibleRemoteButton" class="secondary-action compact" type="button">Select Visible</button>
+                            <button id="clearRemoteSelectionButton" class="secondary-action compact" type="button">Clear</button>
+                            <strong id="remoteListCount">0 files</strong>
+                        </div>
+                    </div>
+                    <div id="remoteFileList" class="remote-file-list">
+                        <div class="empty-state">No remote files listed</div>
                     </div>
                 </div>
 

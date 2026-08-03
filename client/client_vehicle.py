@@ -15,8 +15,9 @@ from can_engine import CANEngine
 from csv_engine import CSVEngine
 
 # Configuration
-SERVER_URL = "ws://140.112.16.226:8889"  # modify this to your server's IP address or hostname
+# SERVER_URL = "ws://140.112.16.226:8889"  # modify this to your server's IP address or hostname
 # SERVER_URL = "ws://localhost:8889"
+SERVER_URL = "ws://receive.monitor.truenas.nturacing.tw"
 RECONNECT_DELAY = 5     # reconnection delay (second)
 HEARTBEAT_INTERVAL = 1  # heartbeat interval (second)
 BATCH_SIZE = 50         # batch size for sending messages (increase to improve efficiency)
@@ -61,7 +62,8 @@ class CANDataClient:
             'csv_set_speed': self.csv_engine.handle_csv_set_speed,
             'csv_restart': self.csv_engine.handle_csv_restart,
             'candecoder_request_log_list': self.csv_engine.handle_candecoder_request_log_list,
-            'candecoder_get_file': self.csv_engine.handle_candecoder_get_file
+            'candecoder_get_file': self.csv_engine.handle_candecoder_get_file,
+            'candecoder_cancel_request': self.csv_engine.handle_candecoder_cancel_request
         }
 
     async def run(self):
@@ -294,6 +296,7 @@ class CANDataClient:
 
         # clear the cached messages
         self.latest_messages.clear()
+        self.csv_engine.cancel_candecoder_transfers()
         print(f"🧹 Flushed {flushed_count} messages.")
     
     def shutdown(self):

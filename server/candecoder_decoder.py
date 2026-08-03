@@ -64,11 +64,16 @@ def _parse_payload(row: dict[str, str], length: int) -> bytes:
     return bytes(payload)
 
 
-def parse_can_csv(filepath: str | Path) -> list[CANLogEntry]:
+def parse_can_csv(
+    filepath: str | Path,
+    should_cancel: Callable[[], None] | None = None,
+) -> list[CANLogEntry]:
     entries: list[CANLogEntry] = []
     with Path(filepath).open("r", newline="", encoding="utf-8-sig") as handle:
         reader = csv.DictReader(handle)
-        for row in reader:
+        for row_index, row in enumerate(reader, start=1):
+            if should_cancel and row_index % 1000 == 0:
+                should_cancel()
             try:
                 timestamp = int(float(_first_value(row, ("Time Stamp", "timestamp", "TimeStamp", "time"))))
                 can_id = _parse_can_id(_first_value(row, ("ID", "id", "can_id", "CAN ID")))
@@ -335,8 +340,11 @@ def decode_selected_signals(
     dbc_paths: list[str | Path],
     selected_signals: set[tuple[int, str]],
     progress_callback: Callable[[int, int, int], None] | None = None,
+    should_cancel: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
-    entries = parse_can_csv(input_csv)
+    if should_cancel:
+        should_cancel()
+    entries = parse_can_csv(input_csv, should_cancel)
     id_to_msg = load_dbc_messages(dbc_paths)
 
     valid_keys = {
@@ -363,6 +371,8 @@ def decode_selected_signals(
     progress_interval = max(1, total_entries // 40) if total_entries else 1
 
     for row_index, entry in enumerate(entries, start=1):
+        if should_cancel and row_index % 1000 == 0:
+            should_cancel()
         if entry.can_id in selected_ids:
             msg = id_to_msg.get(entry.can_id)
             if msg:
@@ -384,6 +394,8 @@ def decode_selected_signals(
         if progress_callback and (row_index == total_entries or row_index % progress_interval == 0):
             progress_callback(row_index, total_entries, len(rows))
 
+    if should_cancel:
+        should_cancel()
     output_path = Path(output_csv)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="", encoding="utf-8") as handle:

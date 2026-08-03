@@ -7,22 +7,35 @@ It receives CAN data from vehicle clients and serves web dashboard to users.
 
 import time
 import json
+import hmac
+import os
 import asyncio
+import hashlib
+from urllib.parse import parse_qs
 import uvicorn
 import websockets
 from typing import List, Dict
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi import FastAPI, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware
 
+from adminshell_service import handle_adminshell_terminal_websocket, handle_adminshell_websocket
 from can_decoder import CANDecoder
 from candecoder_service import CANDecoderSyncService
 
 # Configuration
 WEB_PORT  = 8888  # server hosting port
 DATA_PORT = 8889  # port for client connections
+ADMINSHELL_USERNAME = os.environ.get("ADMINSHELL_USERNAME", "nturt")
+ADMINSHELL_PASSWORD = os.environ.get("ADMINSHELL_PASSWORD", "nturt03734301")
+ADMINSHELL_COOKIE_NAME = "adminshell_session"
+ADMINSHELL_SESSION_MAX_AGE = 12 * 60 * 60
+ADMINSHELL_SESSION_SECRET = os.environ.get(
+    "ADMINSHELL_SESSION_SECRET",
+    "nturacing-adminshell-session-secret",
+)
 
 # FastAPI app setup
 app = FastAPI()
@@ -285,6 +298,75 @@ class MockCanMessage:
 # Global server instance
 can_server = None
 
+
+def _adminshell_signature(username: str, issued_at: int) -> str:
+    message = f"{username}:{issued_at}".encode("utf-8")
+    secret = ADMINSHELL_SESSION_SECRET.encode("utf-8")
+    return hmac.new(secret, message, hashlib.sha256).hexdigest()
+
+
+def _make_adminshell_session(username: str) -> str:
+    issued_at = int(time.time())
+    signature = _adminshell_signature(username, issued_at)
+    return f"{username}:{issued_at}:{signature}"
+
+
+def _verify_adminshell_session(token: str | None) -> bool:
+    if not token:
+        return False
+    try:
+        username, issued_text, signature = token.split(":", 2)
+        issued_at = int(issued_text)
+    except (ValueError, TypeError):
+        return False
+    if username != ADMINSHELL_USERNAME:
+        return False
+    if time.time() - issued_at > ADMINSHELL_SESSION_MAX_AGE:
+        return False
+    expected = _adminshell_signature(username, issued_at)
+    return hmac.compare_digest(signature, expected)
+
+
+def _adminshell_redirect(request: Request) -> RedirectResponse:
+    next_path = request.url.path
+    return RedirectResponse(f"/adminshell/login?next={next_path}", status_code=303)
+
+
+def _safe_adminshell_next(raw_next: str | None) -> str:
+    next_path = str(raw_next or "/adminshell")
+    if not next_path.startswith("/") or next_path.startswith("//"):
+        return "/adminshell"
+    if not (next_path.startswith("/adminshell") or next_path.startswith("/candecoder")):
+        return "/adminshell"
+    return next_path
+
+
+def _protected_tool_title(next_path: str) -> str:
+    if next_path.startswith("/candecoder"):
+        return "CAN Log Decoder"
+    return "Admin Shell"
+
+
+async def _read_urlencoded_form(request: Request) -> dict[str, str]:
+    body = (await request.body()).decode("utf-8", errors="replace")
+    parsed = parse_qs(body, keep_blank_values=True)
+    return {key: values[0] if values else "" for key, values in parsed.items()}
+
+
+def _is_adminshell_request_authenticated(request: Request) -> bool:
+    return _verify_adminshell_session(request.cookies.get(ADMINSHELL_COOKIE_NAME))
+
+
+def _is_adminshell_websocket_authenticated(websocket: WebSocket) -> bool:
+    return _verify_adminshell_session(websocket.cookies.get(ADMINSHELL_COOKIE_NAME))
+
+
+def _protected_api_denied(request: Request) -> JSONResponse | None:
+    if _is_adminshell_request_authenticated(request):
+        return None
+    return JSONResponse({"error": "Unauthorized. Please login first."}, status_code=401)
+
+
 # FastAPI Routes
 @app.get("/", response_class=HTMLResponse)
 async def main_navigation(request: Request):
@@ -320,7 +402,64 @@ async def csv_control(request: Request):
 
 @app.get("/candecoder", response_class=HTMLResponse)
 async def candecoder(request: Request):
+    if not _is_adminshell_request_authenticated(request):
+        return _adminshell_redirect(request)
     return templates.TemplateResponse("candecoder.html", {"request": request})
+
+@app.get("/adminshell/login", response_class=HTMLResponse)
+async def adminshell_login(request: Request):
+    next_path = _safe_adminshell_next(request.query_params.get("next"))
+    if _is_adminshell_request_authenticated(request):
+        return RedirectResponse(next_path, status_code=303)
+    return templates.TemplateResponse(
+        "adminshell_login.html",
+        {
+            "request": request,
+            "next_path": next_path,
+            "tool_title": _protected_tool_title(next_path),
+            "error": "",
+        },
+    )
+
+@app.post("/adminshell/login", response_class=HTMLResponse)
+async def adminshell_login_submit(request: Request):
+    form = await _read_urlencoded_form(request)
+    username = form.get("username", "")
+    password = form.get("password", "")
+    next_path = _safe_adminshell_next(form.get("next"))
+    if hmac.compare_digest(username, ADMINSHELL_USERNAME) and hmac.compare_digest(password, ADMINSHELL_PASSWORD):
+        response = RedirectResponse(next_path, status_code=303)
+        response.set_cookie(
+            ADMINSHELL_COOKIE_NAME,
+            _make_adminshell_session(username),
+            max_age=ADMINSHELL_SESSION_MAX_AGE,
+            httponly=True,
+            samesite="lax",
+            secure=request.url.scheme == "https",
+        )
+        return response
+    return templates.TemplateResponse(
+        "adminshell_login.html",
+        {
+            "request": request,
+            "next_path": next_path,
+            "tool_title": _protected_tool_title(next_path),
+            "error": "Invalid username or password.",
+        },
+        status_code=401,
+    )
+
+@app.get("/adminshell/logout")
+async def adminshell_logout():
+    response = RedirectResponse("/adminshell/login", status_code=303)
+    response.delete_cookie(ADMINSHELL_COOKIE_NAME)
+    return response
+
+@app.get("/adminshell", response_class=HTMLResponse)
+async def adminshell(request: Request):
+    if not _is_adminshell_request_authenticated(request):
+        return _adminshell_redirect(request)
+    return templates.TemplateResponse("adminshell.html", {"request": request})
 
 @app.get('/api/data')
 async def get_data():
@@ -350,6 +489,20 @@ async def websocket_endpoint(websocket: WebSocket):
         if websocket in web_connections:
             web_connections.remove(websocket)
 
+@app.websocket("/ws/adminshell")
+async def adminshell_websocket(websocket: WebSocket):
+    if not _is_adminshell_websocket_authenticated(websocket):
+        await websocket.close(code=1008)
+        return
+    await handle_adminshell_websocket(websocket)
+
+@app.websocket("/ws/adminshell/terminal")
+async def adminshell_terminal_websocket(websocket: WebSocket):
+    if not _is_adminshell_websocket_authenticated(websocket):
+        await websocket.close(code=1008)
+        return
+    await handle_adminshell_terminal_websocket(websocket)
+
 @app.get('/api/status')
 async def get_status():
     # get server status
@@ -371,19 +524,28 @@ async def get_status():
     }
 
 @app.get('/api/candecoder/templates')
-async def get_candecoder_templates():
+async def get_candecoder_templates(request: Request):
+    denied = _protected_api_denied(request)
+    if denied:
+        return denied
     if not can_server:
         return {'templates': []}
     return {'templates': can_server.candecoder_sync.template_rows()}
 
 @app.get('/api/candecoder/dbcs')
-async def get_candecoder_dbcs():
+async def get_candecoder_dbcs(request: Request):
+    denied = _protected_api_denied(request)
+    if denied:
+        return denied
     if not can_server:
         return {'dbcs': []}
     return {'dbcs': can_server.candecoder_sync.dbc_rows()}
 
 @app.post('/api/candecoder/signals')
 async def get_candecoder_signals(request: Request):
+    denied = _protected_api_denied(request)
+    if denied:
+        return denied
     if not can_server:
         return {'signals': []}
     try:
@@ -397,6 +559,9 @@ async def get_candecoder_signals(request: Request):
 
 @app.post('/api/candecoder/templates/save')
 async def save_candecoder_template(request: Request):
+    denied = _protected_api_denied(request)
+    if denied:
+        return denied
     if not can_server:
         return {'error': 'CAN server not initialized'}
     try:
@@ -413,15 +578,89 @@ async def save_candecoder_template(request: Request):
         return {'error': str(e)}
 
 @app.get('/api/candecoder/status')
-async def get_candecoder_status():
+async def get_candecoder_status(request: Request):
+    denied = _protected_api_denied(request)
+    if denied:
+        return denied
     if not can_server:
         return {'error': 'CAN server not initialized'}
     status = can_server.candecoder_sync.get_status()
     status['vehicle_clients'] = len(vehicle_clients)
     return status
 
+@app.post('/api/candecoder/list')
+async def list_candecoder_files(request: Request):
+    denied = _protected_api_denied(request)
+    if denied:
+        return denied
+    if not can_server:
+        return {'error': 'CAN server not initialized'}
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    return await can_server.candecoder_sync.start_list(
+        pattern=data.get('pattern') or '*.csv',
+        source_mode='ssh',
+        rpi_host=data.get('rpi_host'),
+        rpi_user=data.get('rpi_user') or 'pi',
+        rpi_password=data.get('rpi_password'),
+        remote_log_dir=data.get('remote_log_dir'),
+    )
+
+@app.post('/api/candecoder/pull')
+async def pull_candecoder_files(request: Request):
+    denied = _protected_api_denied(request)
+    if denied:
+        return denied
+    if not can_server:
+        return {'error': 'CAN server not initialized'}
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    return await can_server.candecoder_sync.start_pull(
+        pattern=data.get('pattern') or '*.csv',
+        source_mode='ssh',
+        rpi_host=data.get('rpi_host'),
+        rpi_user=data.get('rpi_user') or 'pi',
+        rpi_password=data.get('rpi_password'),
+        remote_log_dir=data.get('remote_log_dir'),
+        selected_relative_paths=data.get('selected_relative_paths') or [],
+    )
+
+@app.post('/api/candecoder/decode')
+async def decode_candecoder_files(request: Request):
+    denied = _protected_api_denied(request)
+    if denied:
+        return denied
+    if not can_server:
+        return {'error': 'CAN server not initialized'}
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    return await can_server.candecoder_sync.start_decode(
+        template_name=data.get('template_name'),
+        dbc_names=data.get('dbc_names') or [],
+        selected_relative_paths=data.get('selected_relative_paths') or [],
+        output_folder_name=data.get('output_folder_name'),
+    )
+
+@app.post('/api/candecoder/cancel')
+async def cancel_candecoder_task(request: Request):
+    denied = _protected_api_denied(request)
+    if denied:
+        return denied
+    if not can_server:
+        return {'error': 'CAN server not initialized'}
+    return await can_server.candecoder_sync.cancel()
+
 @app.post('/api/candecoder/start')
 async def start_candecoder(request: Request):
+    denied = _protected_api_denied(request)
+    if denied:
+        return denied
     if not can_server:
         return {'error': 'CAN server not initialized'}
     try:
@@ -431,12 +670,14 @@ async def start_candecoder(request: Request):
     return await can_server.candecoder_sync.start(
         template_name=data.get('template_name'),
         pattern=data.get('pattern') or '*.csv',
-        source_mode=data.get('source_mode') or 'client',
+        source_mode='ssh',
         rpi_host=data.get('rpi_host'),
         rpi_user=data.get('rpi_user') or 'pi',
         rpi_password=data.get('rpi_password'),
         remote_log_dir=data.get('remote_log_dir'),
         dbc_names=data.get('dbc_names') or [],
+        selected_relative_paths=data.get('selected_relative_paths') or [],
+        output_folder_name=data.get('output_folder_name'),
     )
 
 @app.post('/api/csv/request_list')

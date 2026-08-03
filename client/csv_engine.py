@@ -30,6 +30,7 @@ class CSVEngine:
         self.csv_file_version = 0       # csv file version for detecting changes (incremented on each file selection)
         self.csv_jumped = False         # flag to indicate if a jump command was received or if we just switched to a new file (trigger time re-anchoring in the replay loop)
         self.csv_playback_speed = CSV_REPLAY_SPEED # playback speed multiplier 
+        self.candecoder_transfer_tasks = {}
 
     async def csv_player(self):
         last_version_processed = -1
@@ -262,6 +263,48 @@ class CSVEngine:
         csv_files.sort(key=lambda row: row['relative_path'].lower())
         return csv_files
 
+    async def scan_candecoder_log_files_async(self, pattern='*.csv', recursive=True):
+        root = self.get_logs_root()
+        csv_files = []
+        if not os.path.isdir(root):
+            return csv_files
+
+        if recursive:
+            paths = (
+                os.path.join(dirpath, filename)
+                for dirpath, _, filenames in os.walk(root)
+                for filename in filenames
+            )
+        else:
+            paths = glob.glob(os.path.join(root, pattern))
+
+        for index, filepath in enumerate(paths, start=1):
+            if index % 100 == 0:
+                await asyncio.sleep(0)
+            filename = os.path.basename(filepath)
+            if not fnmatch.fnmatch(filename, pattern):
+                continue
+            if filename.lower().endswith('_decoded.csv'):
+                continue
+            try:
+                file_stat = os.stat(filepath)
+                relative_path = os.path.relpath(filepath, root).replace(os.sep, '/')
+                csv_files.append({
+                    'name': filename,
+                    'filename': filename,
+                    'relative_path': relative_path,
+                    'path': filepath,
+                    'modified': datetime.fromtimestamp(file_stat.st_mtime).isoformat(),
+                    'mtime': file_stat.st_mtime,
+                    'size': file_stat.st_size,
+                    'size_mb': round(file_stat.st_size / 1024 / 1024, 2)
+                })
+            except OSError:
+                continue
+
+        csv_files.sort(key=lambda row: row['relative_path'].lower())
+        return csv_files
+
     def resolve_candecoder_log_path(self, relative_path):
         root = self.get_logs_root()
         safe_parts = [
@@ -295,17 +338,40 @@ class CSVEngine:
 
     async def handle_candecoder_request_log_list(self, data):
         request_id = data.get('request_id')
+        if not request_id:
+            return
+        existing = self.candecoder_transfer_tasks.pop(request_id, None)
+        if existing:
+            existing.cancel()
+        task = asyncio.create_task(self._send_candecoder_log_list(data))
+        self.candecoder_transfer_tasks[request_id] = task
+        task.add_done_callback(lambda done_task, rid=request_id: self.candecoder_transfer_tasks.pop(rid, None))
+
+    async def _send_candecoder_log_list(self, data):
+        request_id = data.get('request_id')
         pattern = data.get('pattern') or '*.csv'
         recursive = bool(data.get('recursive', True))
         print(f"[CANDECODER] Listing logs: pattern={pattern}, recursive={recursive}")
         try:
-            files = self.scan_candecoder_log_files(pattern=pattern, recursive=recursive)
+            files = await self.scan_candecoder_log_files_async(pattern=pattern, recursive=recursive)
             await self.client.websocket.send(json.dumps({
                 'type': 'candecoder_log_list',
                 'request_id': request_id,
                 'files': files,
                 'count': len(files)
             }))
+        except asyncio.CancelledError:
+            print(f"[CANDECODER] Log listing canceled: {request_id}")
+            if self.client.websocket:
+                try:
+                    await self.client.websocket.send(json.dumps({
+                        'type': 'candecoder_file_error',
+                        'request_id': request_id,
+                        'message': 'Listing canceled.'
+                    }))
+                except Exception:
+                    pass
+            raise
         except Exception as e:
             await self.client.websocket.send(json.dumps({
                 'type': 'candecoder_file_error',
@@ -314,6 +380,29 @@ class CSVEngine:
             }))
 
     async def handle_candecoder_get_file(self, data):
+        request_id = data.get('request_id')
+        if not request_id:
+            return
+        existing = self.candecoder_transfer_tasks.pop(request_id, None)
+        if existing:
+            existing.cancel()
+        task = asyncio.create_task(self._send_candecoder_file(data))
+        self.candecoder_transfer_tasks[request_id] = task
+        task.add_done_callback(lambda done_task, rid=request_id: self.candecoder_transfer_tasks.pop(rid, None))
+
+    async def handle_candecoder_cancel_request(self, data):
+        request_id = data.get('request_id')
+        task = self.candecoder_transfer_tasks.get(request_id)
+        if task:
+            print(f"[CANDECODER] Canceling file transfer: {request_id}")
+            task.cancel()
+
+    def cancel_candecoder_transfers(self):
+        for task in list(self.candecoder_transfer_tasks.values()):
+            task.cancel()
+        self.candecoder_transfer_tasks.clear()
+
+    async def _send_candecoder_file(self, data):
         request_id = data.get('request_id')
         relative_path = data.get('relative_path')
         chunk_size = int(data.get('chunk_size') or (256 * 1024))
@@ -346,6 +435,19 @@ class CSVEngine:
                 'size': total_size
             }))
             print(f"[CANDECODER] Sent {relative_path} ({total_size} bytes)")
+        except asyncio.CancelledError:
+            print(f"[CANDECODER] File transfer canceled: {relative_path}")
+            if self.client.websocket:
+                try:
+                    await self.client.websocket.send(json.dumps({
+                        'type': 'candecoder_file_error',
+                        'request_id': request_id,
+                        'relative_path': relative_path,
+                        'message': 'Transfer canceled.'
+                    }))
+                except Exception:
+                    pass
+            raise
         except Exception as e:
             print(f"[CANDECODER] File transfer failed: {e}")
             await self.client.websocket.send(json.dumps({

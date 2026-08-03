@@ -15,12 +15,17 @@ const templateEditorMessage = document.getElementById('templateEditorMessage');
 const patternInput = document.getElementById('patternInput');
 const sourceMode = document.getElementById('sourceMode');
 const sshFields = document.getElementById('sshFields');
+const decodeFolderInput = document.getElementById('decodeFolderInput');
 const rpiHostInput = document.getElementById('rpiHostInput');
+const rpiHostHistory = document.getElementById('rpiHostHistory');
 const rpiUserInput = document.getElementById('rpiUserInput');
 const rpiPasswordInput = document.getElementById('rpiPasswordInput');
 const remoteLogDirInput = document.getElementById('remoteLogDirInput');
 const dbcList = document.getElementById('dbcList');
-const startButton = document.getElementById('startButton');
+const listButton = document.getElementById('listButton');
+const pullButton = document.getElementById('pullButton');
+const decodeButton = document.getElementById('decodeButton');
+const cancelButton = document.getElementById('cancelButton');
 const progressFill = document.getElementById('progressFill');
 const percentLabel = document.getElementById('percentLabel');
 const phaseLabel = document.getElementById('phaseLabel');
@@ -35,8 +40,14 @@ const taskState = document.getElementById('taskState');
 const vehicleCount = document.getElementById('vehicleCount');
 const undecodedFolder = document.getElementById('undecodedFolder');
 const decodedFolder = document.getElementById('decodedFolder');
+const remoteListCount = document.getElementById('remoteListCount');
+const remoteFileList = document.getElementById('remoteFileList');
+const selectVisibleRemoteButton = document.getElementById('selectVisibleRemoteButton');
+const clearRemoteSelectionButton = document.getElementById('clearRemoteSelectionButton');
 
 const SIGNAL_SEPARATOR = '\u001f';
+const RPI_HOST_HISTORY_KEY = 'candecoder.rpiHostHistory';
+const RPI_HOST_HISTORY_LIMIT = 8;
 
 let ws = null;
 let pollTimer = null;
@@ -45,6 +56,9 @@ let templateRows = [];
 let signalRows = [];
 let editorSelectedSignals = new Set();
 let templateTextDirty = false;
+let remoteRows = [];
+let selectedRemotePaths = new Set();
+let currentTaskState = 'idle';
 
 function setError(message) {
     if (!message) {
@@ -54,6 +68,14 @@ function setError(message) {
     }
     errorBox.textContent = message;
     errorBox.classList.remove('hidden');
+}
+
+async function readCandecoderJson(response) {
+    if (response.status === 401) {
+        window.location.href = `/adminshell/login?next=${encodeURIComponent('/candecoder')}`;
+        throw new Error('Unauthorized. Please login first.');
+    }
+    return response.json();
 }
 
 function setTemplateMessage(message, type = '') {
@@ -83,6 +105,10 @@ function updateTaskState(state) {
     taskState.className = 'status-value';
     if (state === 'running') {
         taskState.classList.add('text-sky-300');
+    } else if (state === 'canceling') {
+        taskState.classList.add('text-amber-300');
+    } else if (state === 'canceled') {
+        taskState.classList.add('text-zinc-400');
     } else if (state === 'succeeded') {
         taskState.classList.add('text-emerald-400');
     } else if (state === 'failed') {
@@ -108,6 +134,97 @@ function escapeHtml(value) {
         .replaceAll("'", '&#039;');
 }
 
+function formatBytes(value) {
+    let amount = Number(value || 0);
+    const units = ['B', 'KB', 'MB', 'GB'];
+    for (const unit of units) {
+        if (amount < 1024 || unit === 'GB') {
+            return unit === 'B' ? `${Math.round(amount)} B` : `${amount.toFixed(1)} ${unit}`;
+        }
+        amount /= 1024;
+    }
+    return `${amount.toFixed(1)} GB`;
+}
+
+function formatFileTime(value) {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString([], {
+        year: '2-digit',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
+}
+
+function remoteFileKey(file) {
+    return String(file?.relative_path || file?.filename || file?.name || file?.path || '');
+}
+
+function selectedRemotePathList() {
+    return Array.from(selectedRemotePaths);
+}
+
+function defaultDecodeFolderName() {
+    const now = new Date();
+    const pad = (value) => String(value).padStart(2, '0');
+    return [
+        'decode',
+        now.getFullYear(),
+        pad(now.getMonth() + 1),
+        pad(now.getDate()),
+        pad(now.getHours()),
+        pad(now.getMinutes()),
+        pad(now.getSeconds()),
+    ].join('_');
+}
+
+function renderRemoteFiles(files) {
+    remoteRows = Array.isArray(files) ? files : [];
+    const liveKeys = new Set(remoteRows.map(remoteFileKey).filter(Boolean));
+    selectedRemotePaths = new Set(Array.from(selectedRemotePaths).filter((key) => liveKeys.has(key)));
+
+    const selectedCount = selectedRemotePaths.size;
+    const fileLabel = remoteRows.length === 1 ? '1 file' : `${remoteRows.length} files`;
+    remoteListCount.textContent = selectedCount ? `${selectedCount} / ${fileLabel}` : fileLabel;
+    const isBusy = currentTaskState === 'running' || currentTaskState === 'canceling';
+    selectVisibleRemoteButton.disabled = isBusy || !remoteRows.length;
+    clearRemoteSelectionButton.disabled = isBusy || !selectedRemotePaths.size;
+    if (!remoteRows.length) {
+        remoteFileList.innerHTML = '<div class="empty-state">No remote files listed</div>';
+        return;
+    }
+
+    remoteFileList.innerHTML = remoteRows.map((file) => {
+        const name = file.relative_path || file.filename || file.name || file.path || '-';
+        const key = remoteFileKey(file);
+        const checked = selectedRemotePaths.has(key) ? 'checked' : '';
+        const disabled = isBusy ? 'disabled' : '';
+        return `
+            <div class="remote-file-row">
+                <input type="checkbox" value="${escapeHtml(key)}" ${checked} ${disabled} aria-label="Select ${escapeHtml(name)}">
+                <span class="remote-file-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+                <span class="remote-file-size">${escapeHtml(formatBytes(file.size))}</span>
+                <span class="remote-file-time">${escapeHtml(formatFileTime(file.modified || file.mtime))}</span>
+            </div>
+        `;
+    }).join('');
+
+    for (const checkbox of remoteFileList.querySelectorAll('input[type="checkbox"]')) {
+        checkbox.addEventListener('change', () => {
+            if (checkbox.checked) {
+                selectedRemotePaths.add(checkbox.value);
+            } else {
+                selectedRemotePaths.delete(checkbox.value);
+            }
+            renderRemoteFiles(remoteRows);
+        });
+    }
+}
+
 function renderEvents(events) {
     const rows = (events || []).slice(-80);
     eventLog.innerHTML = rows.map((event) => {
@@ -123,15 +240,21 @@ function renderEvents(events) {
     eventLog.scrollTop = eventLog.scrollHeight;
 }
 
-function setRunningDisabled(isRunning) {
-    startButton.disabled = isRunning;
-    templateSelect.disabled = isRunning;
-    patternInput.disabled = isRunning;
-    sourceMode.disabled = isRunning;
-    rpiHostInput.disabled = isRunning;
-    rpiUserInput.disabled = isRunning;
-    rpiPasswordInput.disabled = isRunning;
-    remoteLogDirInput.disabled = isRunning;
+function setRunningDisabled(isBusy, state = '') {
+    listButton.disabled = isBusy;
+    pullButton.disabled = isBusy;
+    decodeButton.disabled = isBusy;
+    cancelButton.disabled = !isBusy || state === 'canceling';
+    templateSelect.disabled = isBusy;
+    patternInput.disabled = isBusy;
+    sourceMode.disabled = isBusy;
+    decodeFolderInput.disabled = isBusy;
+    rpiHostInput.disabled = isBusy;
+    rpiUserInput.disabled = isBusy;
+    rpiPasswordInput.disabled = isBusy;
+    remoteLogDirInput.disabled = isBusy;
+    selectVisibleRemoteButton.disabled = isBusy || !remoteRows.length;
+    clearRemoteSelectionButton.disabled = isBusy || !selectedRemotePaths.size;
 
     const editorControls = [
         templateEditorSelect,
@@ -144,13 +267,16 @@ function setRunningDisabled(isRunning) {
         saveTemplateButton,
     ];
     for (const control of editorControls) {
-        control.disabled = isRunning;
+        control.disabled = isBusy;
     }
     for (const checkbox of dbcList.querySelectorAll('input[type="checkbox"]')) {
-        checkbox.disabled = isRunning;
+        checkbox.disabled = isBusy;
     }
     for (const checkbox of signalPicker.querySelectorAll('input[type="checkbox"]')) {
-        checkbox.disabled = isRunning;
+        checkbox.disabled = isBusy;
+    }
+    for (const checkbox of remoteFileList.querySelectorAll('input[type="checkbox"]')) {
+        checkbox.disabled = isBusy;
     }
 }
 
@@ -165,6 +291,7 @@ function updateStatus(rawStatus) {
     progressFill.style.width = `${percent}%`;
     percentLabel.textContent = `${percent.toFixed(1)}%`;
     phaseLabel.textContent = textOrDash(status.phase);
+    currentTaskState = status.state || 'idle';
     updateTaskState(status.state);
 
     const progress = status.progress || {};
@@ -180,7 +307,8 @@ function updateStatus(rawStatus) {
     vehicleCount.textContent = status.vehicle_clients ?? vehicleCount.textContent ?? '0';
     undecodedFolder.textContent = status.folders?.undecoded || '-';
     decodedFolder.textContent = status.folders?.decoded || '-';
-    setRunningDisabled(status.state === 'running');
+    setRunningDisabled(currentTaskState === 'running' || currentTaskState === 'canceling', currentTaskState);
+    renderRemoteFiles(status.remote_files || []);
 
     setError(status.error || '');
     renderEvents(status.events || []);
@@ -188,6 +316,45 @@ function updateStatus(rawStatus) {
 
 function updateSourceFields() {
     sshFields.classList.toggle('hidden', sourceMode.value !== 'ssh');
+}
+
+function loadRpiHostHistory() {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(RPI_HOST_HISTORY_KEY) || '[]');
+        return Array.isArray(parsed)
+            ? parsed.map((value) => String(value || '').trim()).filter(Boolean)
+            : [];
+    } catch {
+        return [];
+    }
+}
+
+function saveRpiHostHistory(host) {
+    const cleanHost = String(host || '').trim();
+    if (!cleanHost) return;
+    const history = [
+        cleanHost,
+        ...loadRpiHostHistory().filter((value) => value !== cleanHost),
+    ].slice(0, RPI_HOST_HISTORY_LIMIT);
+    localStorage.setItem(RPI_HOST_HISTORY_KEY, JSON.stringify(history));
+    renderRpiHostHistory(history);
+}
+
+function renderRpiHostHistory(history = loadRpiHostHistory()) {
+    rpiHostHistory.innerHTML = '';
+    for (const host of history) {
+        const option = document.createElement('option');
+        option.value = host;
+        rpiHostHistory.appendChild(option);
+    }
+}
+
+function restoreLastRpiHost() {
+    const history = loadRpiHostHistory();
+    renderRpiHostHistory(history);
+    if (!rpiHostInput.value.trim() && history.length) {
+        rpiHostInput.value = history[0];
+    }
 }
 
 function makeSignalKey(canId, signalName) {
@@ -449,7 +616,7 @@ function renderSignalPicker() {
 async function fetchTemplates(preferredMain, preferredEditor) {
     try {
         const response = await fetch('/api/candecoder/templates');
-        const data = await response.json();
+        const data = await readCandecoderJson(response);
         templateRows = data.templates || [];
         populateTemplateSelects(preferredMain, preferredEditor);
     } catch (error) {
@@ -470,7 +637,7 @@ async function fetchSignals() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ dbc_names: selectedDbcs })
         });
-        const data = await response.json();
+        const data = await readCandecoderJson(response);
         if (data.error) {
             setTemplateMessage(data.error, 'error');
             signalRows = [];
@@ -486,7 +653,7 @@ async function fetchSignals() {
 async function fetchDbcs() {
     try {
         const response = await fetch('/api/candecoder/dbcs');
-        const data = await response.json();
+        const data = await readCandecoderJson(response);
         dbcRows = data.dbcs || [];
         if (!dbcRows.length) {
             dbcList.innerHTML = '<div class="empty-state">No DBC files found</div>';
@@ -521,7 +688,7 @@ async function fetchDbcs() {
 async function fetchStatus() {
     try {
         const response = await fetch('/api/candecoder/status');
-        const data = await response.json();
+        const data = await readCandecoderJson(response);
         updateStatus(data);
     } catch (error) {
         setError(`Status request failed: ${error.message}`);
@@ -559,7 +726,7 @@ async function saveTemplate() {
                 signals
             })
         });
-        const data = await response.json();
+        const data = await readCandecoderJson(response);
         if (data.error) {
             setTemplateMessage(data.error, 'error');
             return;
@@ -577,45 +744,97 @@ async function saveTemplate() {
     }
 }
 
-async function startSync() {
-    startButton.disabled = true;
+function buildSourcePayload() {
+    return {
+        pattern: patternInput.value || '*.csv',
+        source_mode: 'ssh',
+        rpi_host: rpiHostInput.value.trim(),
+        rpi_user: rpiUserInput.value.trim() || 'pi',
+        rpi_password: rpiPasswordInput.value,
+        remote_log_dir: remoteLogDirInput.value.trim(),
+    };
+}
+
+function buildPullPayload() {
+    return {
+        ...buildSourcePayload(),
+        selected_relative_paths: selectedRemotePathList(),
+    };
+}
+
+async function startOperation(operation) {
+    setRunningDisabled(true, 'running');
     setError('');
     const selectedDbcs = selectedDbcNames();
-    if (!selectedDbcs.length) {
+    if (operation === 'decode' && !selectedDbcs.length) {
         setError('Select at least one DBC file.');
-        startButton.disabled = false;
+        setRunningDisabled(false);
         return;
     }
-    if (sourceMode.value === 'ssh' && !rpiHostInput.value.trim()) {
+    if (operation === 'decode' && !selectedRemotePaths.size) {
+        setError('Select pulled file(s) from the file list before decoding.');
+        setRunningDisabled(false);
+        return;
+    }
+    if (operation !== 'decode' && !rpiHostInput.value.trim()) {
         setError('RPI IP / host is required for SSH/SFTP mode.');
-        startButton.disabled = false;
+        setRunningDisabled(false);
         return;
     }
+    if (operation !== 'decode') {
+        saveRpiHostHistory(rpiHostInput.value);
+    }
+    if (operation === 'decode' && !decodeFolderInput.value.trim()) {
+        decodeFolderInput.value = defaultDecodeFolderName();
+    }
+
+    const endpointByOperation = {
+        list: '/api/candecoder/list',
+        pull: '/api/candecoder/pull',
+        decode: '/api/candecoder/decode',
+    };
+    const payload = operation === 'decode'
+        ? {
+            template_name: templateSelect.value || null,
+            dbc_names: selectedDbcs,
+            selected_relative_paths: selectedRemotePathList(),
+            output_folder_name: decodeFolderInput.value.trim(),
+        }
+        : operation === 'pull'
+            ? buildPullPayload()
+            : buildSourcePayload();
+
     try {
-        const response = await fetch('/api/candecoder/start', {
+        const response = await fetch(endpointByOperation[operation], {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                template_name: templateSelect.value || null,
-                pattern: patternInput.value || '*.csv',
-                source_mode: sourceMode.value,
-                rpi_host: rpiHostInput.value.trim(),
-                rpi_user: rpiUserInput.value.trim() || 'pi',
-                rpi_password: rpiPasswordInput.value,
-                remote_log_dir: remoteLogDirInput.value.trim(),
-                dbc_names: selectedDbcs
-            })
+            body: JSON.stringify(payload)
         });
-        const data = await response.json();
+        const data = await readCandecoderJson(response);
         if (data.error) {
             setError(data.error);
-            startButton.disabled = false;
+            setRunningDisabled(false);
             return;
         }
         updateStatus(data);
     } catch (error) {
         setError(`Start failed: ${error.message}`);
-        startButton.disabled = false;
+        setRunningDisabled(false);
+    }
+}
+
+async function cancelOperation() {
+    cancelButton.disabled = true;
+    try {
+        const response = await fetch('/api/candecoder/cancel', { method: 'POST' });
+        const data = await readCandecoderJson(response);
+        if (data.error) {
+            setError(data.error);
+            return;
+        }
+        updateStatus(data);
+    } catch (error) {
+        setError(`Cancel failed: ${error.message}`);
     }
 }
 
@@ -641,7 +860,21 @@ function connectWebSocket() {
     };
 }
 
-startButton.addEventListener('click', startSync);
+listButton.addEventListener('click', () => startOperation('list'));
+pullButton.addEventListener('click', () => startOperation('pull'));
+decodeButton.addEventListener('click', () => startOperation('decode'));
+cancelButton.addEventListener('click', cancelOperation);
+selectVisibleRemoteButton.addEventListener('click', () => {
+    for (const file of remoteRows) {
+        const key = remoteFileKey(file);
+        if (key) selectedRemotePaths.add(key);
+    }
+    renderRemoteFiles(remoteRows);
+});
+clearRemoteSelectionButton.addEventListener('click', () => {
+    selectedRemotePaths.clear();
+    renderRemoteFiles(remoteRows);
+});
 sourceMode.addEventListener('change', updateSourceFields);
 templateEditorSelect.addEventListener('change', () => loadTemplateIntoEditor(templateEditorSelect.value));
 newTemplateButton.addEventListener('click', clearTemplateEditor);
@@ -682,6 +915,7 @@ clearTemplateSignalsButton.addEventListener('click', () => {
 saveTemplateButton.addEventListener('click', saveTemplate);
 
 async function initialize() {
+    restoreLastRpiHost();
     updateSourceFields();
     updateTemplateSignalCount();
     await fetchTemplates();

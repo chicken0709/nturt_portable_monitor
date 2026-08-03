@@ -1,0 +1,437 @@
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    height: 100%;
+}
+
+body {
+    margin: 0;
+    overflow: hidden;
+    background: rgb(9 9 11);
+    color: rgb(244 244 245);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button,
+input,
+textarea {
+    font: inherit;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.shell-app {
+    display: grid;
+    grid-template-columns: 320px minmax(0, 1fr);
+    gap: 16px;
+    height: 100vh;
+    min-height: 0;
+    padding: 16px;
+    overflow: hidden;
+}
+
+.shell-sidebar,
+.terminal-panel {
+    min-width: 0;
+    min-height: 0;
+    border: 1px solid rgb(39 39 42);
+    border-radius: 8px;
+    background: rgb(24 24 27);
+}
+
+.shell-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow: auto;
+    padding: 18px;
+}
+
+.sidebar-header span {
+    color: rgb(56 189 248);
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
+
+.sidebar-header h1 {
+    margin: 8px 0 0;
+    color: white;
+    font-size: 28px;
+    line-height: 1.1;
+}
+
+.header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.header-actions a,
+.login-home {
+    display: inline-flex;
+    min-height: 34px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgb(63 63 70);
+    border-radius: 7px;
+    background: rgb(9 9 11);
+    color: rgb(212 212 216);
+    padding: 0 12px;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.header-actions a:hover,
+.login-home:hover {
+    border-color: rgb(14 165 233);
+    color: white;
+}
+
+.mode-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid rgb(63 63 70);
+    border-radius: 7px;
+    background: rgb(63 63 70);
+}
+
+.mode-tab {
+    height: 40px;
+    border: 0;
+    background: rgb(9 9 11);
+    color: rgb(161 161 170);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 900;
+}
+
+.mode-tab.active {
+    background: rgb(2 132 199);
+    color: white;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin-bottom: 13px;
+    color: rgb(161 161 170);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.field input {
+    width: 100%;
+    height: 38px;
+    min-width: 0;
+    border: 1px solid rgb(63 63 70);
+    border-radius: 7px;
+    outline: none;
+    background: rgb(9 9 11);
+    color: rgb(244 244 245);
+    padding: 0 10px;
+    font-size: 13px;
+}
+
+.field input:focus,
+#commandInput:focus {
+    border-color: rgb(14 165 233);
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.18);
+}
+
+.two-col {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 92px;
+    gap: 10px;
+}
+
+.session-card {
+    display: grid;
+    gap: 6px;
+    margin-top: auto;
+    border: 1px solid rgb(39 39 42);
+    border-radius: 7px;
+    background: rgb(9 9 11);
+    padding: 12px;
+}
+
+.card-label {
+    color: rgb(113 113 122);
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.session-card strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: rgb(228 228 231);
+    font-size: 13px;
+}
+
+.terminal-panel {
+    display: grid;
+    grid-template-rows: 52px minmax(0, 1fr) auto;
+    overflow: hidden;
+}
+
+.terminal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid rgb(39 39 42);
+    padding: 0 14px;
+}
+
+.terminal-header span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: rgb(125 211 252);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 13px;
+    font-weight: 900;
+}
+
+.terminal-actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 8px;
+    overflow-x: auto;
+}
+
+.terminal-actions button,
+.command-form button {
+    height: 34px;
+    min-width: 68px;
+    border: 1px solid rgb(63 63 70);
+    border-radius: 7px;
+    background: rgb(39 39 42);
+    color: rgb(244 244 245);
+    cursor: pointer;
+    padding: 0 12px;
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.terminal-actions button:hover:not(:disabled),
+.command-form button:hover:not(:disabled) {
+    border-color: rgb(14 165 233);
+    background: rgb(63 63 70);
+}
+
+.terminal-actions button:disabled,
+.command-form button:disabled {
+    cursor: not-allowed;
+    color: rgb(113 113 122);
+}
+
+#cancelButton {
+    border-color: rgb(244 63 94 / 0.55);
+    color: rgb(254 205 211);
+}
+
+.terminal-output {
+    min-height: 0;
+    margin: 0;
+    overflow: auto;
+    background: rgb(9 9 11);
+    color: rgb(228 228 231);
+    padding: 14px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 13px;
+    line-height: 1.48;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.xterm-container {
+    min-height: 0;
+    overflow: hidden;
+    background: rgb(9 9 11);
+    padding: 8px;
+}
+
+.xterm-container .xterm {
+    height: 100%;
+}
+
+.xterm-container .xterm-viewport {
+    overflow-y: auto;
+}
+
+.terminal-panel.interactive {
+    grid-template-rows: 52px minmax(0, 1fr);
+}
+
+.line-muted {
+    color: rgb(113 113 122);
+}
+
+.line-command {
+    color: rgb(125 211 252);
+}
+
+.line-stderr {
+    color: rgb(253 164 175);
+}
+
+.line-success {
+    color: rgb(110 231 183);
+}
+
+.line-warning {
+    color: rgb(252 211 77);
+}
+
+.command-form {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) 78px;
+    gap: 10px;
+    align-items: end;
+    border-top: 1px solid rgb(39 39 42);
+    background: rgb(24 24 27);
+    padding: 12px;
+}
+
+.prompt-label {
+    display: flex;
+    height: 38px;
+    align-items: center;
+    justify-content: center;
+    color: rgb(110 231 183);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-weight: 900;
+}
+
+#commandInput {
+    width: 100%;
+    height: 38px;
+    border: 1px solid rgb(63 63 70);
+    border-radius: 7px;
+    outline: none;
+    background: rgb(9 9 11);
+    color: rgb(244 244 245);
+    padding: 0 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 13px;
+    line-height: 38px;
+}
+
+.command-form button {
+    border-color: rgb(14 165 233);
+    background: rgb(2 132 199);
+    color: white;
+}
+
+@media (max-width: 860px) {
+    .shell-app {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(0, auto) minmax(0, 1fr);
+    }
+
+    .terminal-panel {
+        min-height: 0;
+    }
+}
+
+@media (max-width: 560px) {
+    .shell-app {
+        padding: 10px;
+    }
+
+    .command-form {
+        grid-template-columns: 24px minmax(0, 1fr);
+    }
+
+    .command-form button {
+        grid-column: 2;
+        width: 100%;
+    }
+}
+
+.login-page {
+    overflow: auto;
+}
+
+.login-shell {
+    display: grid;
+    min-height: 100vh;
+    place-items: center;
+    padding: 20px;
+}
+
+.login-card {
+    width: min(100%, 390px);
+    border: 1px solid rgb(39 39 42);
+    border-radius: 8px;
+    background: rgb(24 24 27);
+    padding: 24px;
+}
+
+.login-header {
+    margin-bottom: 22px;
+}
+
+.login-header span {
+    color: rgb(56 189 248);
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
+
+.login-header h1 {
+    margin: 8px 0 0;
+    color: white;
+    font-size: 30px;
+    line-height: 1.1;
+}
+
+.login-error {
+    margin-bottom: 16px;
+    border: 1px solid rgb(244 63 94 / 0.55);
+    border-radius: 7px;
+    background: rgb(76 5 25 / 0.35);
+    color: rgb(254 205 211);
+    padding: 10px 12px;
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.login-button {
+    width: 100%;
+    height: 40px;
+    border: 1px solid rgb(14 165 233);
+    border-radius: 7px;
+    background: rgb(2 132 199);
+    color: white;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 900;
+}
+
+.login-button:hover {
+    background: rgb(3 105 161);
+}
+
+.login-home {
+    width: 100%;
+    margin-top: 10px;
+}

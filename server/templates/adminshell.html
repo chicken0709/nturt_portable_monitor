@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NTURT Admin Shell</title>
+    <link rel="icon" href="/static/images/logo.png" type="image/png">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js" defer></script>
+    <script src="/static/js/adminshell.js" defer></script>
+    <link rel="stylesheet" href="/static/css/adminshell.css">
+</head>
+<body>
+    <main class="shell-app">
+        <section class="shell-sidebar">
+            <header class="sidebar-header">
+                <span>NTURT Remote Monitor</span>
+                <h1>Admin Shell</h1>
+                <div class="header-actions">
+                    <a href="/">Home</a>
+                    <a href="/adminshell/logout">Logout</a>
+                </div>
+            </header>
+
+            <div class="mode-tabs" role="tablist" aria-label="Shell target">
+                <button id="localModeButton" class="mode-tab active" type="button">Local</button>
+                <button id="sshModeButton" class="mode-tab" type="button">SSH RPI</button>
+            </div>
+
+            <div id="sshPanel" class="ssh-panel hidden">
+                <label class="field">
+                    <span>RPI IP / Host</span>
+                    <input id="sshHostInput" type="text" list="adminShellHostHistory" placeholder="100.x.x.x or 192.168.x.x" autocomplete="off">
+                    <datalist id="adminShellHostHistory"></datalist>
+                </label>
+
+                <div class="two-col">
+                    <label class="field">
+                        <span>User</span>
+                        <input id="sshUserInput" type="text" value="pi" autocomplete="username">
+                    </label>
+                    <label class="field">
+                        <span>Port</span>
+                        <input id="sshPortInput" type="number" min="1" max="65535" value="22" inputmode="numeric">
+                    </label>
+                </div>
+
+                <label class="field">
+                    <span>Password</span>
+                    <input id="sshPasswordInput" type="password" autocomplete="current-password">
+                </label>
+            </div>
+
+            <div class="session-card">
+                <span class="card-label">Target</span>
+                <strong id="targetLabel">Local server</strong>
+                <span class="card-label">State</span>
+                <strong id="stateLabel">Idle</strong>
+            </div>
+        </section>
+
+        <section class="terminal-panel">
+            <div class="terminal-header">
+                <span id="terminalTitle">local</span>
+                <div class="terminal-actions">
+                    <button id="clearButton" type="button">Clear</button>
+                    <button id="connectTerminalButton" type="button">Connect</button>
+                    <button id="minicomButton" type="button" disabled>Minicom</button>
+                    <button id="stopTerminalButton" type="button" disabled>Stop</button>
+                    <button id="cancelButton" type="button" disabled>Cancel</button>
+                </div>
+            </div>
+
+            <pre id="terminalOutput" class="terminal-output" aria-live="polite"></pre>
+            <div id="xtermContainer" class="xterm-container hidden"></div>
+
+            <form id="commandForm" class="command-form">
+                <span id="promptLabel" class="prompt-label">$</span>
+                <input id="commandInput" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="shell command">
+                <button id="runButton" type="submit">Run</button>
+            </form>
+        </section>
+    </main>
+</body>
+</html>

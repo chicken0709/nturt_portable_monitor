@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NTURT {{ tool_title }} Login</title>
+    <link rel="icon" href="/static/images/logo.png" type="image/png">
+    <link rel="stylesheet" href="/static/css/adminshell.css">
+</head>
+<body class="login-page">
+    <main class="login-shell">
+        <form class="login-card" method="post" action="/adminshell/login">
+            <input type="hidden" name="next" value="{{ next_path }}">
+            <div class="login-header">
+                <span>NTURT Remote Monitor</span>
+                <h1>{{ tool_title }}</h1>
+            </div>
+
+            {% if error %}
+            <div class="login-error">{{ error }}</div>
+            {% endif %}
+
+            <label class="field">
+                <span>Account</span>
+                <input name="username" type="text" autocomplete="username" autofocus>
+            </label>
+
+            <label class="field">
+                <span>Password</span>
+                <input name="password" type="password" autocomplete="current-password">
+            </label>
+
+            <button class="login-button" type="submit">Login</button>
+            <a class="login-home" href="/">Back Home</a>
+        </form>
+    </main>
+</body>
+</html>
