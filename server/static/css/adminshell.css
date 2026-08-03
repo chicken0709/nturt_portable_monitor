@@ -262,17 +262,75 @@ textarea {
 }
 
 .xterm-container {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
     min-height: 0;
     overflow: hidden;
     background: rgb(9 9 11);
     padding: 8px;
 }
 
-.xterm-container .xterm {
+.xterm-container.split {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.xterm-pane {
+    display: grid;
+    grid-template-rows: 30px minmax(0, 1fr);
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border: 1px solid rgb(39 39 42);
+    border-radius: 7px;
+    background: rgb(9 9 11);
+}
+
+.xterm-pane.active {
+    border-color: rgb(14 165 233);
+}
+
+.xterm-pane-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    border-bottom: 1px solid rgb(39 39 42);
+    background: rgb(24 24 27);
+    color: rgb(125 211 252);
+    padding: 0 9px;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.xterm-pane-title span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.xterm-pane-title strong {
+    flex: 0 0 auto;
+    color: rgb(113 113 122);
+    font-size: 10px;
+}
+
+.xterm-pane-body {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    padding: 6px;
+}
+
+.xterm-pane-body .xterm {
     height: 100%;
 }
 
-.xterm-container .xterm-viewport {
+.xterm-pane-body .xterm-viewport {
     overflow-y: auto;
 }
 
@@ -348,6 +406,10 @@ textarea {
 
     .terminal-panel {
         min-height: 0;
+    }
+
+    .xterm-container.split {
+        grid-template-columns: minmax(0, 1fr);
     }
 }
 

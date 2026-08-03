@@ -18,6 +18,7 @@ const runButton = document.getElementById('runButton');
 const cancelButton = document.getElementById('cancelButton');
 const clearButton = document.getElementById('clearButton');
 const connectTerminalButton = document.getElementById('connectTerminalButton');
+const vcuSplitButton = document.getElementById('vcuSplitButton');
 const minicomButton = document.getElementById('minicomButton');
 const stopTerminalButton = document.getElementById('stopTerminalButton');
 const promptLabel = document.getElementById('promptLabel');
@@ -26,6 +27,19 @@ const SSH_HOST_HISTORY_KEY = 'adminshell.sshHostHistory';
 const SSH_HOST_HISTORY_LIMIT = 8;
 const COMMAND_HISTORY_LIMIT = 80;
 const COMPLETION_ROW_WIDTH = 96;
+const SINGLE_TERMINAL_ID = 'sshShell';
+const VCU_TERMINALS = [
+    {
+        id: 'vcuShell',
+        title: 'VCU Shell',
+        command: 'minicom -D /dev/nturt-vcu-shell',
+    },
+    {
+        id: 'vcuConsole',
+        title: 'VCU Console',
+        command: 'minicom -D /dev/nturt-vcu-console',
+    },
+];
 
 let mode = 'local';
 let shellSocket = null;
@@ -38,10 +52,8 @@ let sshCwd = '';
 let runningMode = 'local';
 let completionRequestId = 0;
 let pendingCompletion = null;
-let interactiveSocket = null;
-let interactiveTerminal = null;
-let interactiveConnected = false;
-let interactiveConnecting = false;
+let interactivePanes = new Map();
+let activePaneId = SINGLE_TERMINAL_ID;
 let interactiveActive = false;
 let resizeTimer = null;
 
@@ -59,10 +71,10 @@ function appendLine(text, className = '') {
 
 function setRunning(running, stateText = running ? 'Running' : 'Idle') {
     isRunning = running;
-    if (!interactiveConnected && !interactiveConnecting) {
+    if (!hasInteractiveActivity()) {
         stateLabel.textContent = stateText;
     }
-    const locked = running || interactiveConnected || interactiveConnecting;
+    const locked = running || hasInteractiveActivity();
     runButton.disabled = locked;
     cancelButton.disabled = !running;
     localModeButton.disabled = locked;
@@ -286,11 +298,13 @@ function validateRun(command) {
 }
 
 function updateInteractiveButtons() {
-    const locked = isRunning || interactiveConnected || interactiveConnecting;
+    const locked = isRunning || hasInteractiveActivity();
+    const pane = activePane();
     connectTerminalButton.disabled = locked;
-    minicomButton.disabled = !interactiveConnected;
-    stopTerminalButton.disabled = !interactiveConnected && !interactiveConnecting;
-    cancelButton.disabled = interactiveActive ? true : !isRunning;
+    vcuSplitButton.disabled = locked;
+    minicomButton.disabled = interactivePanes.size > 1 || !(pane && pane.connected);
+    stopTerminalButton.disabled = !hasInteractiveActivity();
+    cancelButton.disabled = hasInteractiveActivity() ? true : !isRunning;
     runButton.disabled = locked;
     localModeButton.disabled = locked;
     sshModeButton.disabled = locked;
@@ -300,8 +314,24 @@ function updateInteractiveButtons() {
     sshPasswordInput.disabled = locked;
 }
 
-function terminalSize() {
-    const rect = xtermContainer.getBoundingClientRect();
+function interactivePaneList() {
+    return Array.from(interactivePanes.values());
+}
+
+function activePane() {
+    return interactivePanes.get(activePaneId) || interactivePaneList()[0] || null;
+}
+
+function hasInteractiveActivity() {
+    return interactiveActive || interactivePaneList().some((pane) => pane.connected || pane.connecting);
+}
+
+function connectedPaneCount() {
+    return interactivePaneList().filter((pane) => pane.connected).length;
+}
+
+function terminalSizeForElement(element) {
+    const rect = element.getBoundingClientRect();
     return {
         cols: Math.max(20, Math.min(240, Math.floor(Math.max(rect.width - 16, 160) / 8))),
         rows: Math.max(6, Math.min(80, Math.floor(Math.max(rect.height - 16, 120) / 17))),
@@ -316,10 +346,10 @@ function setInteractiveActive(active) {
     commandForm.classList.toggle('hidden', active);
     if (active) {
         setMode('ssh');
-        ensureInteractiveTerminal();
         window.setTimeout(() => {
             resizeInteractiveTerminal();
-            interactiveTerminal.focus();
+            const pane = activePane();
+            if (pane) pane.terminal.focus();
         }, 0);
     } else {
         commandInput.focus();
@@ -327,23 +357,81 @@ function setInteractiveActive(active) {
     updateInteractiveButtons();
 }
 
-function writeTerminalLine(text) {
-    if (interactiveTerminal) {
-        interactiveTerminal.write(`${text}\r\n`);
+function setActivePane(id) {
+    activePaneId = id;
+    for (const pane of interactivePaneList()) {
+        pane.element.classList.toggle('active', pane.id === id);
+    }
+    updateInteractiveButtons();
+}
+
+function updatePaneLayout() {
+    xtermContainer.classList.toggle('split', interactivePanes.size > 1);
+}
+
+function setPaneState(pane, state) {
+    pane.status = state;
+    pane.statusElement.textContent = state;
+}
+
+function updateInteractiveStateLabel() {
+    const panes = interactivePaneList();
+    if (!panes.length) {
+        stateLabel.textContent = 'Idle';
+        return;
+    }
+    const connecting = panes.filter((pane) => pane.connecting).length;
+    const connected = connectedPaneCount();
+    if (connecting) {
+        stateLabel.textContent = panes.length > 1 ? `Connecting ${connected}/${panes.length}` : 'Connecting';
+    } else if (connected) {
+        stateLabel.textContent = panes.length > 1 ? `Interactive ${connected}/${panes.length}` : 'Interactive';
+    } else {
+        stateLabel.textContent = 'Interactive closed';
+    }
+}
+
+function writeTerminalLine(text, pane = activePane()) {
+    if (pane) {
+        pane.terminal.write(`${text}\r\n`);
     } else {
         appendLine(text, 'line-muted');
     }
 }
 
-function ensureInteractiveTerminal() {
-    if (interactiveTerminal) {
-        return interactiveTerminal;
-    }
+function createInteractiveTerminal(id, title) {
     if (!window.Terminal) {
         appendLine('[terminal] xterm.js is not loaded.', 'line-stderr');
         return null;
     }
-    interactiveTerminal = new window.Terminal({
+    const existing = interactivePanes.get(id);
+    if (existing) {
+        return existing;
+    }
+
+    const paneElement = document.createElement('section');
+    paneElement.className = 'xterm-pane';
+    paneElement.dataset.paneId = id;
+
+    const titleElement = document.createElement('div');
+    titleElement.className = 'xterm-pane-title';
+
+    const titleText = document.createElement('span');
+    titleText.textContent = title;
+
+    const statusElement = document.createElement('strong');
+    statusElement.textContent = 'idle';
+
+    const bodyElement = document.createElement('div');
+    bodyElement.className = 'xterm-pane-body';
+
+    titleElement.appendChild(titleText);
+    titleElement.appendChild(statusElement);
+    paneElement.appendChild(titleElement);
+    paneElement.appendChild(bodyElement);
+    xtermContainer.appendChild(paneElement);
+
+    const terminal = new window.Terminal({
         cursorBlink: true,
         convertEol: true,
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
@@ -357,26 +445,50 @@ function ensureInteractiveTerminal() {
             selectionBackground: '#0ea5e955',
         },
     });
-    interactiveTerminal.open(xtermContainer);
-    interactiveTerminal.onData((data) => {
-        if (interactiveSocket && interactiveSocket.readyState === WebSocket.OPEN && interactiveConnected) {
-            interactiveSocket.send(JSON.stringify({ type: 'input', data }));
+    terminal.open(bodyElement);
+
+    const pane = {
+        id,
+        title,
+        element: paneElement,
+        bodyElement,
+        statusElement,
+        terminal,
+        socket: null,
+        connected: false,
+        connecting: false,
+        commandOnConnect: '',
+        commandSent: false,
+    };
+
+    terminal.onData((data) => {
+        if (pane.socket && pane.socket.readyState === WebSocket.OPEN && pane.connected) {
+            pane.socket.send(JSON.stringify({ type: 'input', data }));
         }
     });
-    return interactiveTerminal;
+    paneElement.addEventListener('pointerdown', () => {
+        setActivePane(id);
+        terminal.focus();
+    });
+    interactivePanes.set(id, pane);
+    setActivePane(id);
+    updatePaneLayout();
+    return pane;
 }
 
 function resizeInteractiveTerminal() {
-    if (!interactiveTerminal || !interactiveActive) return;
-    const size = terminalSize();
-    interactiveTerminal.resize(size.cols, size.rows);
-    if (interactiveSocket && interactiveSocket.readyState === WebSocket.OPEN) {
-        interactiveSocket.send(JSON.stringify({ type: 'resize', cols: size.cols, rows: size.rows }));
+    if (!interactiveActive) return;
+    for (const pane of interactivePaneList()) {
+        const size = terminalSizeForElement(pane.bodyElement);
+        pane.terminal.resize(size.cols, size.rows);
+        if (pane.socket && pane.socket.readyState === WebSocket.OPEN) {
+            pane.socket.send(JSON.stringify({ type: 'resize', cols: size.cols, rows: size.rows }));
+        }
     }
 }
 
-function terminalPayloadBase() {
-    const size = terminalSize();
+function terminalPayloadBase(pane) {
+    const size = terminalSizeForElement(pane.bodyElement);
     return {
         ssh: {
             host: sshHostInput.value.trim(),
@@ -389,8 +501,69 @@ function terminalPayloadBase() {
     };
 }
 
+async function connectInteractivePane({ id, title, commandOnConnect = '' }) {
+    if (!window.Terminal) {
+        appendLine('[terminal] xterm.js is not loaded.', 'line-stderr');
+        return null;
+    }
+    if (mode !== 'ssh') {
+        setMode('ssh');
+    }
+    if (!validateSshTarget()) return null;
+    setInteractiveActive(true);
+    const pane = createInteractiveTerminal(id, title);
+    if (!pane) return null;
+
+    saveSshHost(sshHostInput.value);
+    pane.connected = false;
+    pane.connecting = true;
+    pane.commandOnConnect = commandOnConnect;
+    pane.commandSent = false;
+    setPaneState(pane, 'connecting');
+    updateInteractiveStateLabel();
+    updateInteractiveButtons();
+    pane.terminal.clear();
+    writeTerminalLine('[connecting]', pane);
+
+    const socket = new WebSocket(terminalSocketUrl());
+    pane.socket = socket;
+
+    socket.onopen = () => {
+        const payload = terminalPayloadBase(pane);
+        socket.send(JSON.stringify({ type: 'start', ...payload }));
+    };
+    socket.onerror = () => {
+        writeTerminalLine('[terminal error] WebSocket connection failed.', pane);
+        pane.connected = false;
+        pane.connecting = false;
+        setPaneState(pane, 'error');
+        updateInteractiveStateLabel();
+        updateInteractiveButtons();
+    };
+    socket.onclose = () => {
+        if (!interactivePanes.has(pane.id)) return;
+        pane.connected = false;
+        pane.connecting = false;
+        setPaneState(pane, 'closed');
+        updateInteractiveStateLabel();
+        updateInteractiveButtons();
+    };
+    socket.onmessage = (event) => {
+        handleInteractiveMessage(pane, event.data);
+    };
+    return pane;
+}
+
 async function connectInteractiveTerminal() {
-    if (interactiveConnected || interactiveConnecting) return;
+    if (hasInteractiveActivity()) return;
+    await connectInteractivePane({
+        id: SINGLE_TERMINAL_ID,
+        title: 'SSH Shell',
+    });
+}
+
+async function connectVcuSplitTerminals() {
+    if (hasInteractiveActivity()) return;
     if (!window.Terminal) {
         appendLine('[terminal] xterm.js is not loaded.', 'line-stderr');
         return;
@@ -400,98 +573,83 @@ async function connectInteractiveTerminal() {
     }
     if (!validateSshTarget()) return;
     setInteractiveActive(true);
-    const terminal = ensureInteractiveTerminal();
-    if (!terminal) return;
-
-    saveSshHost(sshHostInput.value);
-    interactiveConnecting = true;
-    stateLabel.textContent = 'Connecting';
-    updateInteractiveButtons();
-    terminal.clear();
-    writeTerminalLine('[connecting]');
-
-    const socket = new WebSocket(terminalSocketUrl());
-    interactiveSocket = socket;
-
-    socket.onopen = () => {
-        const payload = terminalPayloadBase();
-        socket.send(JSON.stringify({ type: 'start', ...payload }));
-    };
-    socket.onerror = () => {
-        writeTerminalLine('[terminal error] WebSocket connection failed.');
-        interactiveConnected = false;
-        interactiveConnecting = false;
-        stateLabel.textContent = 'Idle';
-        updateInteractiveButtons();
-    };
-    socket.onclose = () => {
-        interactiveConnected = false;
-        interactiveConnecting = false;
-        stateLabel.textContent = 'Idle';
-        setInteractiveActive(false);
-        updateInteractiveButtons();
-    };
-    socket.onmessage = (event) => {
-        handleInteractiveMessage(event.data);
-    };
+    for (const config of VCU_TERMINALS) {
+        await connectInteractivePane(config);
+    }
+    resizeInteractiveTerminal();
 }
 
-function handleInteractiveMessage(raw) {
+function handleInteractiveMessage(pane, raw) {
     let data;
     try {
         data = JSON.parse(raw);
     } catch {
-        if (interactiveTerminal) interactiveTerminal.write(raw);
+        pane.terminal.write(raw);
         return;
     }
     if (data.type === 'output') {
-        if (interactiveTerminal) interactiveTerminal.write(data.data || '');
+        pane.terminal.write(data.data || '');
         return;
     }
     if (data.type === 'status') {
         if (data.state === 'connecting') {
-            stateLabel.textContent = 'Connecting';
+            pane.connecting = true;
+            pane.connected = false;
+            setPaneState(pane, 'connecting');
         } else if (data.state === 'connected') {
-            interactiveConnected = true;
-            interactiveConnecting = false;
-            stateLabel.textContent = 'Interactive';
+            pane.connected = true;
+            pane.connecting = false;
+            setPaneState(pane, 'connected');
             resizeInteractiveTerminal();
-            if (interactiveTerminal) interactiveTerminal.focus();
+            if (!pane.commandSent && pane.commandOnConnect) {
+                pane.commandSent = true;
+                window.setTimeout(() => {
+                    if (pane.socket && pane.socket.readyState === WebSocket.OPEN && pane.connected) {
+                        pane.socket.send(JSON.stringify({ type: 'input', data: `${pane.commandOnConnect}\r` }));
+                    }
+                }, 250);
+            }
+            pane.terminal.focus();
         } else if (data.state === 'closed') {
-            interactiveConnected = false;
-            interactiveConnecting = false;
-            stateLabel.textContent = 'Idle';
-            writeTerminalLine('[closed]');
-            setInteractiveActive(false);
+            pane.connected = false;
+            pane.connecting = false;
+            setPaneState(pane, 'closed');
+            writeTerminalLine('[closed]', pane);
         }
+        updateInteractiveStateLabel();
         updateInteractiveButtons();
         return;
     }
     if (data.type === 'error') {
-        interactiveConnected = false;
-        interactiveConnecting = false;
-        stateLabel.textContent = 'Idle';
-        writeTerminalLine(`[error] ${data.message || 'Unknown terminal error'}`);
+        pane.connected = false;
+        pane.connecting = false;
+        setPaneState(pane, 'error');
+        updateInteractiveStateLabel();
+        writeTerminalLine(`[error] ${data.message || 'Unknown terminal error'}`, pane);
         updateInteractiveButtons();
     }
 }
 
 function stopInteractiveTerminal() {
-    if (interactiveSocket && interactiveSocket.readyState === WebSocket.OPEN) {
-        interactiveSocket.send(JSON.stringify({ type: 'stop' }));
-        interactiveSocket.close();
+    for (const pane of interactivePaneList()) {
+        if (pane.socket && pane.socket.readyState === WebSocket.OPEN) {
+            pane.socket.send(JSON.stringify({ type: 'stop' }));
+            pane.socket.close();
+        }
     }
-    interactiveConnected = false;
-    interactiveConnecting = false;
+    interactivePanes.clear();
+    xtermContainer.innerHTML = '';
+    updatePaneLayout();
+    activePaneId = SINGLE_TERMINAL_ID;
     stateLabel.textContent = 'Idle';
     setInteractiveActive(false);
     updateInteractiveButtons();
 }
 
-function sendInteractiveCommand(command) {
-    if (!interactiveConnected || !interactiveSocket || interactiveSocket.readyState !== WebSocket.OPEN) return;
-    interactiveSocket.send(JSON.stringify({ type: 'input', data: `${command}\r` }));
-    if (interactiveTerminal) interactiveTerminal.focus();
+function sendInteractiveCommand(command, pane = activePane()) {
+    if (!pane || !pane.connected || !pane.socket || pane.socket.readyState !== WebSocket.OPEN) return;
+    pane.socket.send(JSON.stringify({ type: 'input', data: `${command}\r` }));
+    pane.terminal.focus();
 }
 
 function setCommandValue(value) {
@@ -653,8 +811,10 @@ cancelButton.addEventListener('click', () => {
 });
 
 clearButton.addEventListener('click', () => {
-    if (interactiveActive && interactiveTerminal) {
-        interactiveTerminal.clear();
+    if (interactiveActive) {
+        for (const pane of interactivePaneList()) {
+            pane.terminal.clear();
+        }
     } else {
         terminalOutput.textContent = '';
     }
@@ -663,8 +823,13 @@ clearButton.addEventListener('click', () => {
 connectTerminalButton.addEventListener('click', () => {
     connectInteractiveTerminal().catch((error) => {
         writeTerminalLine(`[error] ${error.message}`);
-        interactiveConnected = false;
-        interactiveConnecting = false;
+        updateInteractiveButtons();
+    });
+});
+
+vcuSplitButton.addEventListener('click', () => {
+    connectVcuSplitTerminals().catch((error) => {
+        writeTerminalLine(`[error] ${error.message}`);
         updateInteractiveButtons();
     });
 });
