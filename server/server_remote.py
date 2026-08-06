@@ -667,6 +667,25 @@ async def move_candecoder_workspace_item(request: Request):
     except Exception as e:
         return {'error': str(e)}
 
+@app.post('/api/candecoder/workspace/copy')
+async def copy_candecoder_workspace_item(request: Request):
+    denied = _protected_api_denied(request)
+    if denied:
+        return denied
+    if not can_server:
+        return {'error': 'CAN server not initialized'}
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    try:
+        return can_server.candecoder_sync.copy_workspace_item(
+            data.get('source_relative_path'),
+            data.get('destination_relative_path'),
+        )
+    except Exception as e:
+        return {'error': str(e)}
+
 @app.post('/api/candecoder/list')
 async def list_candecoder_files(request: Request):
     denied = _protected_api_denied(request)

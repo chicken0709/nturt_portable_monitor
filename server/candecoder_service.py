@@ -42,7 +42,7 @@ STATE_FILE = WORKSPACE_DIR / "sync_state.json"
 DEFAULT_PATTERN = "*.csv"
 CHUNK_SIZE = 256 * 1024
 WORKSPACE_EDIT_MAX_BYTES = 5 * 1024 * 1024
-DEFAULT_EXTERNAL_MOVE_ROOTS = ("/mnt/webdev",)
+DEFAULT_EXTERNAL_MOVE_ROOTS = ("/mnt/webdav",)
 EXTERNAL_MOVE_ROOTS_ENV = "CANDECODER_EXTERNAL_MOVE_ROOTS"
 DEFAULT_REMOTE_LOG_DIR = "/home/pi/Desktop/RPI_Desktop/LOGS"
 
@@ -1053,7 +1053,7 @@ class CANDecoderSyncService:
 
     def _ensure_workspace_mutation_allowed(self) -> None:
         if self.current_task and not self.current_task.done():
-            raise RuntimeError("Wait for the current CAN decoder task to finish before editing or moving workspace files.")
+            raise RuntimeError("Wait for the current CAN decoder task to finish before editing, copying, or moving workspace files.")
 
     def read_workspace_file(self, relative_path: str | None) -> dict[str, Any]:
         path = self._workspace_path(relative_path)
@@ -1107,12 +1107,12 @@ class CANDecoderSyncService:
             "encoding": "utf-8",
         }
 
-    def move_workspace_item(
+    def _prepare_workspace_transfer(
         self,
         source_relative_path: str | None,
         destination_relative_path: str | None,
-    ) -> dict[str, Any]:
-        self._ensure_workspace_mutation_allowed()
+        action_name: str,
+    ) -> tuple[Path, Path, bool]:
         source = self._workspace_path(source_relative_path)
         destination_raw = str(destination_relative_path or "").strip()
         destination, destination_in_workspace = self._move_destination_path(destination_raw)
@@ -1120,11 +1120,11 @@ class CANDecoderSyncService:
         source_resolved = source.resolve(strict=False)
 
         if source_resolved == root:
-            raise RuntimeError("The workspace root cannot be moved.")
+            raise RuntimeError(f"The workspace root cannot be {action_name}.")
         if not source.exists():
             raise RuntimeError("Source workspace item does not exist.")
         if source.is_symlink():
-            raise RuntimeError("Symlinks cannot be moved from the browser.")
+            raise RuntimeError(f"Symlinks cannot be {action_name} from the browser.")
         if not destination_in_workspace and destination.resolve(strict=False) in self._external_move_roots():
             destination = destination / source.name
         elif destination.exists() and destination.is_dir():
@@ -1138,11 +1138,24 @@ class CANDecoderSyncService:
             raise RuntimeError("Destination must include a file or folder name.")
         try:
             destination_resolved.relative_to(source_resolved)
-            raise RuntimeError("A folder cannot be moved into itself.")
+            raise RuntimeError(f"A folder cannot be {action_name} into itself.")
         except ValueError:
             pass
 
         destination.parent.mkdir(parents=True, exist_ok=True)
+        return source, destination, destination_in_workspace
+
+    def move_workspace_item(
+        self,
+        source_relative_path: str | None,
+        destination_relative_path: str | None,
+    ) -> dict[str, Any]:
+        self._ensure_workspace_mutation_allowed()
+        source, destination, destination_in_workspace = self._prepare_workspace_transfer(
+            source_relative_path,
+            destination_relative_path,
+            "moved",
+        )
         shutil.move(str(source), str(destination))
         moved_path = destination
         item_type = "directory" if moved_path.is_dir() else "file"
@@ -1152,6 +1165,34 @@ class CANDecoderSyncService:
             "source_relative_path": str(source_relative_path or ""),
             "destination_relative_path": destination_relative,
             "destination_path": str(moved_path),
+            "in_workspace": destination_in_workspace,
+            "type": item_type,
+            "workspace": self.workspace_tree(),
+        }
+
+    def copy_workspace_item(
+        self,
+        source_relative_path: str | None,
+        destination_relative_path: str | None,
+    ) -> dict[str, Any]:
+        self._ensure_workspace_mutation_allowed()
+        source, destination, destination_in_workspace = self._prepare_workspace_transfer(
+            source_relative_path,
+            destination_relative_path,
+            "copied",
+        )
+        if source.is_dir():
+            shutil.copytree(source, destination)
+        else:
+            shutil.copy2(source, destination)
+        copied_path = destination
+        item_type = "directory" if copied_path.is_dir() else "file"
+        destination_relative = self._workspace_relative(copied_path) if destination_in_workspace else ""
+        return {
+            "copied": True,
+            "source_relative_path": str(source_relative_path or ""),
+            "destination_relative_path": destination_relative,
+            "destination_path": str(copied_path),
             "in_workspace": destination_in_workspace,
             "type": item_type,
             "workspace": self.workspace_tree(),
