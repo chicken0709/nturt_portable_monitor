@@ -44,7 +44,7 @@ CHUNK_SIZE = 256 * 1024
 WORKSPACE_EDIT_MAX_BYTES = 5 * 1024 * 1024
 DEFAULT_EXTERNAL_MOVE_ROOTS = ("/mnt/webdav",)
 EXTERNAL_MOVE_ROOTS_ENV = "CANDECODER_EXTERNAL_MOVE_ROOTS"
-DEFAULT_REMOTE_LOG_DIR = "/home/pi/Desktop/RPI_Desktop/LOGS"
+DEFAULT_REMOTE_LOG_DIR = "/home/nturt/Desktop/RPI_Desktop/LOGS"
 
 
 class OperationCancelled(Exception):
@@ -1145,6 +1145,87 @@ class CANDecoderSyncService:
         destination.parent.mkdir(parents=True, exist_ok=True)
         return source, destination, destination_in_workspace
 
+    def _prepare_workspace_copy(
+        self,
+        source_relative_path: str | None,
+        destination_relative_path: str | None,
+    ) -> tuple[Path, Path, bool]:
+        source = self._workspace_path(source_relative_path)
+        destination_raw = str(destination_relative_path or "").strip()
+        destination, destination_in_workspace = self._move_destination_path(destination_raw)
+        root = self._workspace_root()
+        source_resolved = source.resolve(strict=False)
+
+        if source_resolved == root:
+            raise RuntimeError("The workspace root cannot be copied.")
+        if not source.exists():
+            raise RuntimeError("Source workspace item does not exist.")
+        if source.is_symlink():
+            raise RuntimeError("Symlinks cannot be copied from the browser.")
+
+        if source.is_file():
+            if not destination_in_workspace and destination.resolve(strict=False) in self._external_move_roots():
+                destination = destination / source.name
+            elif destination.exists() and destination.is_dir():
+                destination = destination / source.name
+            elif destination_raw.endswith(("/", "\\")):
+                destination = destination / source.name
+            destination_resolved = destination.resolve(strict=False)
+            if destination.exists():
+                raise RuntimeError("Destination already exists. Choose a new path.")
+            if destination_resolved == root:
+                raise RuntimeError("Destination must include a file name.")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            return source, destination, destination_in_workspace
+
+        destination_resolved = destination.resolve(strict=False)
+        if destination.exists() and not destination.is_dir():
+            raise RuntimeError("Folder contents can only be copied into a folder destination.")
+        try:
+            destination_resolved.relative_to(source_resolved)
+            raise RuntimeError("A folder cannot be copied into itself.")
+        except ValueError:
+            pass
+
+        destination.mkdir(parents=True, exist_ok=True)
+        return source, destination, destination_in_workspace
+
+    def _copy_directory_contents(self, source: Path, destination: Path) -> None:
+        conflicts: list[str] = []
+        symlinks: list[str] = []
+        for item in source.rglob("*"):
+            relative = item.relative_to(source)
+            target = destination / relative
+            if item.is_symlink():
+                symlinks.append(relative.as_posix())
+                continue
+            if item.is_dir():
+                if target.exists() and not target.is_dir():
+                    conflicts.append(relative.as_posix())
+                continue
+            if target.exists():
+                conflicts.append(relative.as_posix())
+
+        if symlinks:
+            preview = ", ".join(symlinks[:5])
+            suffix = "..." if len(symlinks) > 5 else ""
+            raise RuntimeError(f"Folder contains symlink(s) that cannot be copied from the browser: {preview}{suffix}")
+        if conflicts:
+            preview = ", ".join(conflicts[:5])
+            suffix = "..." if len(conflicts) > 5 else ""
+            raise RuntimeError(f"Destination already contains matching item(s): {preview}{suffix}")
+
+        destination.mkdir(parents=True, exist_ok=True)
+        for item in source.rglob("*"):
+            relative = item.relative_to(source)
+            target = destination / relative
+            if item.is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+                shutil.copystat(item, target, follow_symlinks=False)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(item, target)
+
     def move_workspace_item(
         self,
         source_relative_path: str | None,
@@ -1176,13 +1257,12 @@ class CANDecoderSyncService:
         destination_relative_path: str | None,
     ) -> dict[str, Any]:
         self._ensure_workspace_mutation_allowed()
-        source, destination, destination_in_workspace = self._prepare_workspace_transfer(
+        source, destination, destination_in_workspace = self._prepare_workspace_copy(
             source_relative_path,
             destination_relative_path,
-            "copied",
         )
         if source.is_dir():
-            shutil.copytree(source, destination)
+            self._copy_directory_contents(source, destination)
         else:
             shutil.copy2(source, destination)
         copied_path = destination

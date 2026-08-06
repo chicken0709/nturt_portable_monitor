@@ -61,6 +61,7 @@ const workspaceMessage = document.getElementById('workspaceMessage');
 const SIGNAL_SEPARATOR = '\u001f';
 const RPI_HOST_HISTORY_KEY = 'candecoder.rpiHostHistory';
 const RPI_HOST_HISTORY_LIMIT = 8;
+const DEFAULT_WORKSPACE_COPY_TARGET = '/mnt/webdav/vehical_data_EP7/';
 
 let ws = null;
 let pollTimer = null;
@@ -306,7 +307,7 @@ function syncWorkspaceSelectionInTree() {
 function selectWorkspaceNode(relativePath, type) {
     selectedWorkspacePath = normalizeWorkspacePath(relativePath);
     selectedWorkspaceType = type || '';
-    workspaceMoveInput.value = selectedWorkspacePath;
+    workspaceMoveInput.value = DEFAULT_WORKSPACE_COPY_TARGET;
     setWorkspaceMessage('');
     clearWorkspaceFileEditor();
     updateWorkspaceEditorControls();
