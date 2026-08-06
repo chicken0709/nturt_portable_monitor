@@ -41,6 +41,9 @@ CACHE_DIR = WORKSPACE_DIR / ".raw_cache"
 STATE_FILE = WORKSPACE_DIR / "sync_state.json"
 DEFAULT_PATTERN = "*.csv"
 CHUNK_SIZE = 256 * 1024
+WORKSPACE_EDIT_MAX_BYTES = 5 * 1024 * 1024
+DEFAULT_EXTERNAL_MOVE_ROOTS = ("/mnt/webdev",)
+EXTERNAL_MOVE_ROOTS_ENV = "CANDECODER_EXTERNAL_MOVE_ROOTS"
 DEFAULT_REMOTE_LOG_DIR = "/home/pi/Desktop/RPI_Desktop/LOGS"
 
 
@@ -885,6 +888,274 @@ class CANDecoderSyncService:
         manifest_path = WORKSPACE_DIR / filename
         manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
         return manifest_path
+
+    def workspace_tree(self, max_entries: int = 2000) -> dict[str, Any]:
+        limit = max(1, min(int(max_entries or 2000), 5000))
+        if not WORKSPACE_DIR.exists():
+            return {
+                "name": WORKSPACE_DIR.name,
+                "path": str(WORKSPACE_DIR),
+                "exists": False,
+                "total_entries": 0,
+                "truncated": False,
+                "tree": None,
+            }
+
+        total_entries = 0
+        truncated = False
+
+        def path_kind(path: Path) -> str:
+            if path.is_symlink():
+                return "link"
+            if path.is_dir():
+                return "directory"
+            return "file"
+
+        def sort_key(path: Path) -> tuple[bool, str]:
+            try:
+                is_file_group = not (path.is_dir() and not path.is_symlink())
+            except OSError:
+                is_file_group = True
+            return is_file_group, path.name.lower()
+
+        def describe(path: Path, is_root: bool = False) -> dict[str, Any]:
+            nonlocal total_entries, truncated
+
+            kind = path_kind(path)
+            item: dict[str, Any] = {
+                "name": path.name,
+                "relative_path": "" if is_root else path.relative_to(WORKSPACE_DIR).as_posix(),
+                "path": str(path),
+                "type": kind,
+            }
+
+            try:
+                stats = path.stat()
+            except OSError as exc:
+                item["error"] = str(exc)
+                return item
+
+            item["modified"] = datetime.fromtimestamp(stats.st_mtime).isoformat(timespec="seconds")
+            if kind != "directory":
+                item["size"] = stats.st_size
+                return item
+
+            children: list[dict[str, Any]] = []
+            try:
+                entries = sorted(path.iterdir(), key=sort_key)
+            except OSError as exc:
+                item["children"] = children
+                item["error"] = str(exc)
+                return item
+
+            for child in entries:
+                if total_entries >= limit:
+                    truncated = True
+                    break
+                total_entries += 1
+                children.append(describe(child))
+
+            item["children"] = children
+            return item
+
+        tree = describe(WORKSPACE_DIR, is_root=True)
+        return {
+            "name": WORKSPACE_DIR.name,
+            "path": str(WORKSPACE_DIR),
+            "exists": True,
+            "total_entries": total_entries,
+            "truncated": truncated,
+            "max_entries": limit,
+            "tree": tree,
+        }
+
+    def _workspace_root(self) -> Path:
+        WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
+        return WORKSPACE_DIR.resolve()
+
+    def _workspace_path(self, relative_path: str | None, allow_root: bool = False) -> Path:
+        raw = str(relative_path or "").replace("\\", "/").strip()
+        if not raw:
+            if allow_root:
+                return self._workspace_root()
+            raise RuntimeError("Workspace path is required.")
+
+        pure = PurePosixPath(raw)
+        if pure.is_absolute():
+            raise RuntimeError("Workspace path must be relative.")
+
+        parts = pure.parts
+        if not parts or any(part in {"", ".", ".."} for part in parts):
+            raise RuntimeError("Workspace path cannot contain empty, current, or parent segments.")
+        if any(":" in part for part in parts):
+            raise RuntimeError("Workspace path cannot contain drive or scheme separators.")
+
+        root = self._workspace_root()
+        path = WORKSPACE_DIR.joinpath(*parts)
+        try:
+            path.resolve(strict=False).relative_to(root)
+        except ValueError as exc:
+            raise RuntimeError("Workspace path must stay inside candecoder_workspace.") from exc
+        return path
+
+    def _workspace_relative(self, path: Path) -> str:
+        root = self._workspace_root()
+        return path.resolve(strict=False).relative_to(root).as_posix()
+
+    def _external_move_roots(self) -> list[Path]:
+        values = list(DEFAULT_EXTERNAL_MOVE_ROOTS)
+        configured = os.environ.get(EXTERNAL_MOVE_ROOTS_ENV, "")
+        if configured.strip():
+            values.extend(
+                part.strip()
+                for part in configured.replace(",", ";").split(";")
+                if part.strip()
+            )
+
+        roots: list[Path] = []
+        seen: set[str] = set()
+        for value in values:
+            root = Path(value).expanduser()
+            if not root.is_absolute():
+                continue
+            resolved = root.resolve(strict=False)
+            key = str(resolved)
+            if key in seen:
+                continue
+            seen.add(key)
+            roots.append(resolved)
+        return roots
+
+    def _external_destination_path(self, value: str) -> tuple[Path, Path]:
+        path = Path(value).expanduser()
+        if not path.is_absolute():
+            raise RuntimeError("External move destination must be an absolute path.")
+
+        resolved = path.resolve(strict=False)
+        for root in self._external_move_roots():
+            try:
+                resolved.relative_to(root)
+                return path, root
+            except ValueError:
+                continue
+
+        allowed = ", ".join(str(root) for root in self._external_move_roots()) or "(none configured)"
+        raise RuntimeError(f"External destination is not allowed. Allowed roots: {allowed}")
+
+    def _move_destination_path(self, destination_path: str | None) -> tuple[Path, bool]:
+        raw = str(destination_path or "").strip()
+        if not raw:
+            raise RuntimeError("Destination path is required.")
+        if Path(raw).expanduser().is_absolute():
+            path, _ = self._external_destination_path(raw)
+            return path, False
+        return self._workspace_path(raw), True
+
+    def _ensure_workspace_mutation_allowed(self) -> None:
+        if self.current_task and not self.current_task.done():
+            raise RuntimeError("Wait for the current CAN decoder task to finish before editing or moving workspace files.")
+
+    def read_workspace_file(self, relative_path: str | None) -> dict[str, Any]:
+        path = self._workspace_path(relative_path)
+        if not path.exists():
+            raise RuntimeError("Workspace file does not exist.")
+        if not path.is_file() or path.is_symlink():
+            raise RuntimeError("Only regular workspace files can be edited.")
+
+        stats = path.stat()
+        if stats.st_size > WORKSPACE_EDIT_MAX_BYTES:
+            raise RuntimeError(f"File is too large to edit in the browser: {format_bytes(stats.st_size)}")
+
+        raw = path.read_bytes()
+        if b"\x00" in raw[:4096]:
+            raise RuntimeError("Binary files cannot be edited in the browser.")
+        try:
+            content = raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise RuntimeError("Workspace file is not valid UTF-8 text.") from exc
+
+        return {
+            "relative_path": self._workspace_relative(path),
+            "name": path.name,
+            "size": stats.st_size,
+            "modified": datetime.fromtimestamp(stats.st_mtime).isoformat(timespec="seconds"),
+            "encoding": "utf-8",
+            "content": content,
+        }
+
+    def save_workspace_file(self, relative_path: str | None, content: str | None) -> dict[str, Any]:
+        self._ensure_workspace_mutation_allowed()
+        path = self._workspace_path(relative_path)
+        if not path.exists():
+            raise RuntimeError("Workspace file does not exist.")
+        if not path.is_file() or path.is_symlink():
+            raise RuntimeError("Only regular workspace files can be saved.")
+
+        text = "" if content is None else str(content)
+        raw = text.encode("utf-8")
+        if len(raw) > WORKSPACE_EDIT_MAX_BYTES:
+            raise RuntimeError(f"Edited content is too large to save: {format_bytes(len(raw))}")
+
+        path.write_text(text, encoding="utf-8", newline="")
+        stats = path.stat()
+        return {
+            "saved": True,
+            "relative_path": self._workspace_relative(path),
+            "name": path.name,
+            "size": stats.st_size,
+            "modified": datetime.fromtimestamp(stats.st_mtime).isoformat(timespec="seconds"),
+            "encoding": "utf-8",
+        }
+
+    def move_workspace_item(
+        self,
+        source_relative_path: str | None,
+        destination_relative_path: str | None,
+    ) -> dict[str, Any]:
+        self._ensure_workspace_mutation_allowed()
+        source = self._workspace_path(source_relative_path)
+        destination_raw = str(destination_relative_path or "").strip()
+        destination, destination_in_workspace = self._move_destination_path(destination_raw)
+        root = self._workspace_root()
+        source_resolved = source.resolve(strict=False)
+
+        if source_resolved == root:
+            raise RuntimeError("The workspace root cannot be moved.")
+        if not source.exists():
+            raise RuntimeError("Source workspace item does not exist.")
+        if source.is_symlink():
+            raise RuntimeError("Symlinks cannot be moved from the browser.")
+        if not destination_in_workspace and destination.resolve(strict=False) in self._external_move_roots():
+            destination = destination / source.name
+        elif destination.exists() and destination.is_dir():
+            destination = destination / source.name
+        elif destination_raw.endswith(("/", "\\")):
+            destination = destination / source.name
+        destination_resolved = destination.resolve(strict=False)
+        if destination.exists():
+            raise RuntimeError("Destination already exists. Choose a new path.")
+        if destination_resolved == root:
+            raise RuntimeError("Destination must include a file or folder name.")
+        try:
+            destination_resolved.relative_to(source_resolved)
+            raise RuntimeError("A folder cannot be moved into itself.")
+        except ValueError:
+            pass
+
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source), str(destination))
+        moved_path = destination
+        item_type = "directory" if moved_path.is_dir() else "file"
+        destination_relative = self._workspace_relative(moved_path) if destination_in_workspace else ""
+        return {
+            "moved": True,
+            "source_relative_path": str(source_relative_path or ""),
+            "destination_relative_path": destination_relative,
+            "destination_path": str(moved_path),
+            "in_workspace": destination_in_workspace,
+            "type": item_type,
+            "workspace": self.workspace_tree(),
+        }
 
     async def _list_remote_files(
         self,

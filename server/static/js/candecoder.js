@@ -44,6 +44,19 @@ const remoteListCount = document.getElementById('remoteListCount');
 const remoteFileList = document.getElementById('remoteFileList');
 const selectVisibleRemoteButton = document.getElementById('selectVisibleRemoteButton');
 const clearRemoteSelectionButton = document.getElementById('clearRemoteSelectionButton');
+const workspaceTree = document.getElementById('workspaceTree');
+const workspaceTreeCount = document.getElementById('workspaceTreeCount');
+const refreshWorkspaceButton = document.getElementById('refreshWorkspaceButton');
+const workspaceEditor = document.getElementById('workspaceEditor');
+const workspaceSelectedPath = document.getElementById('workspaceSelectedPath');
+const workspaceMoveInput = document.getElementById('workspaceMoveInput');
+const loadWorkspaceFileButton = document.getElementById('loadWorkspaceFileButton');
+const moveWorkspaceButton = document.getElementById('moveWorkspaceButton');
+const workspaceContentField = document.getElementById('workspaceContentField');
+const workspaceFileContent = document.getElementById('workspaceFileContent');
+const workspaceFileMeta = document.getElementById('workspaceFileMeta');
+const saveWorkspaceFileButton = document.getElementById('saveWorkspaceFileButton');
+const workspaceMessage = document.getElementById('workspaceMessage');
 
 const SIGNAL_SEPARATOR = '\u001f';
 const RPI_HOST_HISTORY_KEY = 'candecoder.rpiHostHistory';
@@ -59,6 +72,10 @@ let templateTextDirty = false;
 let remoteRows = [];
 let selectedRemotePaths = new Set();
 let currentTaskState = 'idle';
+let workspaceFetchInFlight = false;
+let selectedWorkspacePath = '';
+let selectedWorkspaceType = '';
+let loadedWorkspaceFilePath = '';
 
 function setError(message) {
     if (!message) {
@@ -225,6 +242,283 @@ function renderRemoteFiles(files) {
     }
 }
 
+function workspaceTypeLabel(node) {
+    if (node?.type === 'directory') return 'DIR';
+    if (node?.type === 'link') return 'LINK';
+    const name = String(node?.name || '');
+    const extension = name.includes('.') ? name.split('.').pop() : '';
+    return extension ? extension.slice(0, 4).toUpperCase() : 'FILE';
+}
+
+function workspaceItemLabel(count, truncated = false) {
+    const label = count === 1 ? '1 item' : `${count} items`;
+    return truncated ? `${label} shown` : label;
+}
+
+function normalizeWorkspacePath(value) {
+    return String(value || '').replaceAll('\\', '/').trim();
+}
+
+function workspaceMutationBusy() {
+    return currentTaskState === 'running' || currentTaskState === 'canceling';
+}
+
+function setWorkspaceMessage(message, type = '') {
+    if (!message) {
+        workspaceMessage.className = 'workspace-message hidden';
+        workspaceMessage.textContent = '';
+        return;
+    }
+    workspaceMessage.className = `workspace-message ${type}`.trim();
+    workspaceMessage.textContent = message;
+}
+
+function clearWorkspaceFileEditor() {
+    loadedWorkspaceFilePath = '';
+    workspaceFileContent.value = '';
+    workspaceFileMeta.textContent = '-';
+    workspaceContentField.classList.add('hidden');
+    updateWorkspaceEditorControls();
+}
+
+function updateWorkspaceEditorControls() {
+    const isBusy = workspaceMutationBusy();
+    const hasWorkspaceSelection = Boolean(selectedWorkspacePath) && selectedWorkspaceType !== 'external';
+    const canLoadFile = selectedWorkspaceType === 'file' && hasWorkspaceSelection;
+    const moveTarget = normalizeWorkspacePath(workspaceMoveInput.value);
+    const canMove = hasWorkspaceSelection && moveTarget && moveTarget !== selectedWorkspacePath;
+
+    workspaceEditor.classList.toggle('hidden', !selectedWorkspacePath && selectedWorkspaceType !== 'directory');
+    workspaceSelectedPath.textContent = selectedWorkspacePath || 'candecoder_workspace';
+    loadWorkspaceFileButton.disabled = !canLoadFile;
+    workspaceMoveInput.disabled = isBusy || !hasWorkspaceSelection;
+    moveWorkspaceButton.disabled = isBusy || !canMove;
+    workspaceFileContent.disabled = isBusy || !loadedWorkspaceFilePath;
+    saveWorkspaceFileButton.disabled = isBusy || !loadedWorkspaceFilePath;
+}
+
+function syncWorkspaceSelectionInTree() {
+    for (const item of workspaceTree.querySelectorAll('[data-workspace-path]')) {
+        item.classList.toggle('selected', item.dataset.workspacePath === selectedWorkspacePath);
+    }
+}
+
+function selectWorkspaceNode(relativePath, type) {
+    selectedWorkspacePath = normalizeWorkspacePath(relativePath);
+    selectedWorkspaceType = type || '';
+    workspaceMoveInput.value = selectedWorkspacePath;
+    setWorkspaceMessage('');
+    clearWorkspaceFileEditor();
+    updateWorkspaceEditorControls();
+    syncWorkspaceSelectionInTree();
+    if (selectedWorkspaceType === 'file' && selectedWorkspacePath) {
+        fetchWorkspaceFile(selectedWorkspacePath);
+    }
+}
+
+function attachWorkspaceNodeEvents() {
+    for (const item of workspaceTree.querySelectorAll('[data-workspace-path]')) {
+        item.addEventListener('click', (event) => {
+            event.stopPropagation();
+            selectWorkspaceNode(item.dataset.workspacePath || '', item.dataset.workspaceType || '');
+        });
+    }
+    syncWorkspaceSelectionInTree();
+}
+
+function renderWorkspaceMeta(parts) {
+    const cleanParts = parts.filter(Boolean);
+    if (!cleanParts.length) return '';
+    return `<span class="workspace-node-meta">${cleanParts.map(escapeHtml).join(' | ')}</span>`;
+}
+
+function renderWorkspaceChildren(children) {
+    if (!children.length) {
+        return '<div class="workspace-empty-child">Empty</div>';
+    }
+    return `<div class="workspace-children">${children.map((child) => renderWorkspaceNode(child)).join('')}</div>`;
+}
+
+function renderWorkspaceNode(node, isRoot = false) {
+    if (!node) return '';
+    const kind = node.type === 'directory' ? 'directory' : 'file';
+    const name = node.name || '-';
+    const title = node.path || node.relative_path || name;
+    const typeLabel = workspaceTypeLabel(node);
+
+    if (kind === 'directory') {
+        const children = Array.isArray(node.children) ? node.children : [];
+        const open = isRoot || !String(node.relative_path || '').includes('/') ? 'open' : '';
+        const childLabel = children.length === 1 ? '1 child' : `${children.length} children`;
+        const error = node.error ? `<div class="workspace-node-error">${escapeHtml(node.error)}</div>` : '';
+        return `
+            <details class="workspace-node workspace-directory" ${open}>
+                <summary data-workspace-path="${escapeHtml(node.relative_path || '')}" data-workspace-type="${escapeHtml(node.type || 'directory')}" title="${escapeHtml(title)}">
+                    <span class="workspace-node-type">${escapeHtml(typeLabel)}</span>
+                    <span class="workspace-node-name">${escapeHtml(name)}</span>
+                    ${renderWorkspaceMeta([childLabel, formatFileTime(node.modified)])}
+                </summary>
+                ${error}
+                ${renderWorkspaceChildren(children)}
+            </details>
+        `;
+    }
+
+    const sizeLabel = typeof node.size === 'number' ? formatBytes(node.size) : '';
+    const error = node.error ? node.error : '';
+    return `
+        <div class="workspace-node workspace-file" data-workspace-path="${escapeHtml(node.relative_path || '')}" data-workspace-type="${escapeHtml(node.type || 'file')}" title="${escapeHtml(title)}">
+            <span class="workspace-node-type">${escapeHtml(typeLabel)}</span>
+            <span class="workspace-node-name">${escapeHtml(name)}</span>
+            ${renderWorkspaceMeta([sizeLabel, formatFileTime(node.modified), error.trim()])}
+        </div>
+    `;
+}
+
+function renderWorkspaceTree(data) {
+    if (!data || data.error) {
+        workspaceTreeCount.textContent = '-';
+        workspaceTree.innerHTML = `<div class="empty-state">${escapeHtml(data?.error || 'Workspace tree unavailable')}</div>`;
+        return;
+    }
+
+    workspaceTreeCount.textContent = workspaceItemLabel(Number(data.total_entries || 0), Boolean(data.truncated));
+    if (!data.exists || !data.tree) {
+        workspaceTree.innerHTML = '<div class="empty-state">candecoder_workspace has not been created yet</div>';
+        return;
+    }
+
+    const truncated = data.truncated
+        ? `<div class="workspace-truncated">Showing first ${escapeHtml(data.max_entries || data.total_entries)} entries</div>`
+        : '';
+    workspaceTree.innerHTML = `${renderWorkspaceNode(data.tree, true)}${truncated}`;
+    attachWorkspaceNodeEvents();
+}
+
+async function fetchWorkspaceTree() {
+    if (workspaceFetchInFlight) return;
+    workspaceFetchInFlight = true;
+    refreshWorkspaceButton.disabled = true;
+    try {
+        const response = await fetch('/api/candecoder/workspace');
+        const data = await readCandecoderJson(response);
+        renderWorkspaceTree(data);
+    } catch (error) {
+        renderWorkspaceTree({ error: `Workspace load failed: ${error.message}` });
+    } finally {
+        workspaceFetchInFlight = false;
+        refreshWorkspaceButton.disabled = false;
+    }
+}
+
+async function fetchWorkspaceFile(relativePath = selectedWorkspacePath) {
+    const path = normalizeWorkspacePath(relativePath);
+    if (!path) return;
+    loadWorkspaceFileButton.disabled = true;
+    setWorkspaceMessage('');
+    try {
+        const response = await fetch(`/api/candecoder/workspace/file?path=${encodeURIComponent(path)}`);
+        const data = await readCandecoderJson(response);
+        if (selectedWorkspacePath !== path) {
+            return;
+        }
+        if (data.error) {
+            clearWorkspaceFileEditor();
+            setWorkspaceMessage(data.error, 'error');
+            return;
+        }
+
+        loadedWorkspaceFilePath = data.relative_path || path;
+        workspaceFileContent.value = data.content || '';
+        workspaceFileMeta.textContent = `${formatBytes(data.size)} | ${formatFileTime(data.modified)} | ${data.encoding || 'text'}`;
+        workspaceContentField.classList.remove('hidden');
+        updateWorkspaceEditorControls();
+    } catch (error) {
+        clearWorkspaceFileEditor();
+        setWorkspaceMessage(`File load failed: ${error.message}`, 'error');
+    } finally {
+        updateWorkspaceEditorControls();
+    }
+}
+
+async function saveWorkspaceFile() {
+    if (!loadedWorkspaceFilePath) return;
+    saveWorkspaceFileButton.disabled = true;
+    setWorkspaceMessage('');
+    try {
+        const response = await fetch('/api/candecoder/workspace/file/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                relative_path: loadedWorkspaceFilePath,
+                content: workspaceFileContent.value,
+            }),
+        });
+        const data = await readCandecoderJson(response);
+        if (data.error) {
+            setWorkspaceMessage(data.error, 'error');
+            return;
+        }
+
+        workspaceFileMeta.textContent = `${formatBytes(data.size)} | ${formatFileTime(data.modified)} | ${data.encoding || 'text'}`;
+        setWorkspaceMessage(`Saved ${data.relative_path || loadedWorkspaceFilePath}.`, 'success');
+        fetchWorkspaceTree();
+    } catch (error) {
+        setWorkspaceMessage(`Save failed: ${error.message}`, 'error');
+    } finally {
+        updateWorkspaceEditorControls();
+    }
+}
+
+async function moveWorkspaceItem() {
+    const source = selectedWorkspacePath;
+    const destination = normalizeWorkspacePath(workspaceMoveInput.value);
+    if (!source || !destination || source === destination) {
+        updateWorkspaceEditorControls();
+        return;
+    }
+
+    moveWorkspaceButton.disabled = true;
+    setWorkspaceMessage('');
+    try {
+        const response = await fetch('/api/candecoder/workspace/move', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                source_relative_path: source,
+                destination_relative_path: destination,
+            }),
+        });
+        const data = await readCandecoderJson(response);
+        if (data.error) {
+            setWorkspaceMessage(data.error, 'error');
+            return;
+        }
+
+        const moved = data.moved || {};
+        const movedInsideWorkspace = Boolean(moved.in_workspace);
+        selectedWorkspacePath = normalizeWorkspacePath(
+            movedInsideWorkspace
+                ? (moved.destination_relative_path || destination)
+                : (moved.destination_path || destination)
+        );
+        selectedWorkspaceType = movedInsideWorkspace ? (moved.type || selectedWorkspaceType) : 'external';
+        loadedWorkspaceFilePath = '';
+        workspaceMoveInput.value = movedInsideWorkspace ? selectedWorkspacePath : '';
+        renderWorkspaceTree(data.workspace);
+        setWorkspaceMessage(`Moved to ${selectedWorkspacePath}.`, 'success');
+        clearWorkspaceFileEditor();
+        updateWorkspaceEditorControls();
+        if (movedInsideWorkspace && selectedWorkspaceType === 'file') {
+            fetchWorkspaceFile(selectedWorkspacePath);
+        }
+    } catch (error) {
+        setWorkspaceMessage(`Move failed: ${error.message}`, 'error');
+    } finally {
+        updateWorkspaceEditorControls();
+    }
+}
+
 function renderEvents(events) {
     const rows = (events || []).slice(-80);
     eventLog.innerHTML = rows.map((event) => {
@@ -278,6 +572,7 @@ function setRunningDisabled(isBusy, state = '') {
     for (const checkbox of remoteFileList.querySelectorAll('input[type="checkbox"]')) {
         checkbox.disabled = isBusy;
     }
+    updateWorkspaceEditorControls();
 }
 
 function updateStatus(rawStatus) {
@@ -864,6 +1159,11 @@ listButton.addEventListener('click', () => startOperation('list'));
 pullButton.addEventListener('click', () => startOperation('pull'));
 decodeButton.addEventListener('click', () => startOperation('decode'));
 cancelButton.addEventListener('click', cancelOperation);
+refreshWorkspaceButton.addEventListener('click', fetchWorkspaceTree);
+loadWorkspaceFileButton.addEventListener('click', () => fetchWorkspaceFile());
+saveWorkspaceFileButton.addEventListener('click', saveWorkspaceFile);
+moveWorkspaceButton.addEventListener('click', moveWorkspaceItem);
+workspaceMoveInput.addEventListener('input', updateWorkspaceEditorControls);
 selectVisibleRemoteButton.addEventListener('click', () => {
     for (const file of remoteRows) {
         const key = remoteFileKey(file);
@@ -921,6 +1221,7 @@ async function initialize() {
     await fetchTemplates();
     await fetchDbcs();
     await fetchStatus();
+    await fetchWorkspaceTree();
     connectWebSocket();
     pollTimer = setInterval(fetchStatus, 2000);
 }

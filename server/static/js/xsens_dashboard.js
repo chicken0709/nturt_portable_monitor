@@ -1,672 +1,401 @@
-// WebSocket Connection
 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+const maxDataPoints = 80;
 
-// Initialize Legacy GPS Map
-let legacyMap = L.map('legacy-map').setView([0, 0], 2);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors'
-}).addTo(legacyMap);
-
-let legacyMarker = null;
-let legacyPathPoints = [];
-let legacyPathPolyline = null;
-let legacyMapInitialized = false;
-let legacyTrackingEnabled = false;
-
-// Initialize Xsens GPS Map
-let xsensMap = L.map('xsens-map').setView([0, 0], 2);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors'
-}).addTo(xsensMap);
-
+let xsensMap = null;
 let xsensMarker = null;
 let xsensPathPoints = [];
 let xsensPathPolyline = null;
 let xsensMapInitialized = false;
 let xsensTrackingEnabled = false;
 
-// GPS Map Update Functions
-function updateLegacyGPSMap(lat, lon) {
-    if (lat !== null && lon !== null && !isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0) {
-        const latLng = [lat, lon];
-        
-        if (!legacyMapInitialized) {
-            legacyMap.setView(latLng, 15);
-            legacyMapInitialized = true;
-        }
-        
-        if (legacyMarker) {
-            legacyMarker.setLatLng(latLng);
-        } else {
-            const rippleIcon = L.divIcon({
-                className: 'ripple-marker',
-                html: '<div style="background: #f59e0b; width: 20px; height: 20px; border-radius: 50%; box-shadow: 0 0 10px rgba(245, 158, 11, 0.8);"></div>',
-                iconSize: [20, 20],
-                iconAnchor: [10, 10]
-            });
-            
-            legacyMarker = L.marker(latLng, { icon: rippleIcon }).addTo(legacyMap)
-                .bindPopup('Legacy GPS Position');
-        }
-        
-        if (legacyTrackingEnabled) {
-            legacyPathPoints.push(latLng);
-            if (legacyPathPolyline) {
-                legacyMap.removeLayer(legacyPathPolyline);
-            }
-            legacyPathPolyline = L.polyline(legacyPathPoints, {
-                color: '#f59e0b',
-                weight: 3,
-                opacity: 0.7
-            }).addTo(legacyMap);
-        }
-        
-        if (legacyMap.getZoom() >= 10) {
-            legacyMap.setView(latLng, legacyMap.getZoom());
-        }
+function byId(id) {
+    return document.getElementById(id);
+}
+
+function isNumber(value) {
+    return typeof value === 'number' && Number.isFinite(value);
+}
+
+function formatValue(value, decimals = 3) {
+    if (!isNumber(value)) return '--';
+    return value.toFixed(decimals);
+}
+
+function formatUnit(value, decimals, unit) {
+    const formatted = formatValue(value, decimals);
+    return formatted === '--' ? formatted : `${formatted} ${unit}`;
+}
+
+function setText(id, value) {
+    const element = byId(id);
+    if (element) {
+        element.textContent = value;
     }
+}
+
+function setStatus(id, ok) {
+    const element = byId(id);
+    if (element) {
+        element.className = ok ? 'status-dot ok' : 'status-dot fail';
+    }
+}
+
+function formatBool(value) {
+    if (value === null || value === undefined) return '--';
+    return value ? 'OK' : 'No';
+}
+
+function formatClip(...values) {
+    if (values.every((value) => value === null || value === undefined)) return '--';
+    return values.some(Boolean) ? 'Clipped' : 'OK';
+}
+
+function fixTypeLabel(value) {
+    const labels = {
+        0: 'No Fix',
+        1: 'Dead Reckoning',
+        2: '2D Fix',
+        3: '3D Fix',
+        4: 'GNSS + DR',
+        5: 'Time Only',
+    };
+    return labels[value] || (value === null || value === undefined ? '--' : String(value));
+}
+
+function rtkStatusLabel(value) {
+    const labels = {
+        0: 'No RTK',
+        1: 'RTK Float',
+        2: 'RTK Fixed',
+    };
+    return labels[value] || (value === null || value === undefined ? '--' : String(value));
+}
+
+function setupMap() {
+    if (!window.L || !byId('xsens-map')) return;
+
+    xsensMap = L.map('xsens-map').setView([0, 0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(xsensMap);
 }
 
 function updateXsensGPSMap(lat, lon) {
-    if (lat !== null && lon !== null && !isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0) {
-        const latLng = [lat, lon];
-        
-        if (!xsensMapInitialized) {
-            xsensMap.setView(latLng, 15);
-            xsensMapInitialized = true;
+    if (!xsensMap || !isNumber(lat) || !isNumber(lon) || lat === 0 || lon === 0) return;
+
+    const latLng = [lat, lon];
+    if (!xsensMapInitialized) {
+        xsensMap.setView(latLng, 15);
+        xsensMapInitialized = true;
+    }
+
+    if (xsensMarker) {
+        xsensMarker.setLatLng(latLng);
+    } else {
+        const icon = L.divIcon({
+            className: 'ripple-marker',
+            html: '<div class="marker-core"></div>',
+            iconSize: [20, 20],
+            iconAnchor: [10, 10],
+        });
+        xsensMarker = L.marker(latLng, { icon }).addTo(xsensMap).bindPopup('Xsens GPS Position');
+    }
+
+    if (xsensTrackingEnabled) {
+        xsensPathPoints.push(latLng);
+        if (xsensPathPolyline) {
+            xsensMap.removeLayer(xsensPathPolyline);
         }
-        
-        if (xsensMarker) {
-            xsensMarker.setLatLng(latLng);
-        } else {
-            const rippleIcon = L.divIcon({
-                className: 'ripple-marker',
-                html: '<div style="background: #3b82f6; width: 20px; height: 20px; border-radius: 50%; box-shadow: 0 0 10px rgba(59, 130, 246, 0.8);"></div>',
-                iconSize: [20, 20],
-                iconAnchor: [10, 10]
-            });
-            
-            xsensMarker = L.marker(latLng, { icon: rippleIcon }).addTo(xsensMap)
-                .bindPopup('Xsens GPS Position');
-        }
-        
-        if (xsensTrackingEnabled) {
-            xsensPathPoints.push(latLng);
-            if (xsensPathPolyline) {
-                xsensMap.removeLayer(xsensPathPolyline);
-            }
-            xsensPathPolyline = L.polyline(xsensPathPoints, {
-                color: '#3b82f6',
-                weight: 3,
-                opacity: 0.7
-            }).addTo(xsensMap);
-        }
-        
-        if (xsensMap.getZoom() >= 10) {
-            xsensMap.setView(latLng, xsensMap.getZoom());
-        }
+        xsensPathPolyline = L.polyline(xsensPathPoints, {
+            color: '#06b6d4',
+            weight: 3,
+            opacity: 0.75,
+        }).addTo(xsensMap);
+    }
+
+    if (xsensMap.getZoom() >= 10) {
+        xsensMap.setView(latLng, xsensMap.getZoom());
     }
 }
 
-// Chart Setup - Individual axis comparison charts
-const maxDataPoints = 50;
+function createAxisChart(canvasId, label, unit, colors) {
+    const canvas = byId(canvasId);
+    if (!window.Chart || !canvas) return null;
 
-// Acceleration X Chart
-const accXChart = new Chart(document.getElementById('acc-x-chart').getContext('2d'), {
-    type: 'line',
-    data: {
-        labels: [],
-        datasets: [
-            { 
-                label: 'Xsens IMU', 
-                data: [], 
-                borderColor: 'rgb(59, 130, 246)', 
-                backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                tension: 0.1,
-                borderWidth: 2
-            },
-            { 
-                label: 'IMU2', 
-                data: [], 
-                borderColor: 'rgb(239, 68, 68)', 
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                tension: 0.1,
-                borderWidth: 2
-            }
-        ]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: false,
-        scales: {
-            x: { display: false },
-            y: { 
-                beginAtZero: false,
-                title: { display: true, text: 'm/s²' }
-            }
+    return new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                {
+                    label: `${label} X`,
+                    data: [],
+                    borderColor: colors[0],
+                    backgroundColor: `${colors[0]}22`,
+                    tension: 0.15,
+                    borderWidth: 2,
+                    pointRadius: 0,
+                },
+                {
+                    label: `${label} Y`,
+                    data: [],
+                    borderColor: colors[1],
+                    backgroundColor: `${colors[1]}22`,
+                    tension: 0.15,
+                    borderWidth: 2,
+                    pointRadius: 0,
+                },
+                {
+                    label: `${label} Z`,
+                    data: [],
+                    borderColor: colors[2],
+                    backgroundColor: `${colors[2]}22`,
+                    tension: 0.15,
+                    borderWidth: 2,
+                    pointRadius: 0,
+                },
+            ],
         },
-        plugins: {
-            legend: { position: 'top' }
-        }
-    }
-});
-
-// Acceleration Y Chart
-const accYChart = new Chart(document.getElementById('acc-y-chart').getContext('2d'), {
-    type: 'line',
-    data: {
-        labels: [],
-        datasets: [
-            { 
-                label: 'Xsens IMU', 
-                data: [], 
-                borderColor: 'rgb(59, 130, 246)', 
-                backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                tension: 0.1,
-                borderWidth: 2
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            scales: {
+                x: { display: false },
+                y: {
+                    beginAtZero: false,
+                    title: { display: true, text: unit },
+                    grid: { color: 'rgba(148, 163, 184, 0.14)' },
+                    ticks: { color: '#94a3b8' },
+                },
             },
-            { 
-                label: 'IMU2', 
-                data: [], 
-                borderColor: 'rgb(239, 68, 68)', 
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                tension: 0.1,
-                borderWidth: 2
-            }
-        ]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: false,
-        scales: {
-            x: { display: false },
-            y: { 
-                beginAtZero: false,
-                title: { display: true, text: 'm/s²' }
-            }
-        },
-        plugins: {
-            legend: { position: 'top' }
-        }
-    }
-});
-
-// Acceleration Z Chart
-const accZChart = new Chart(document.getElementById('acc-z-chart').getContext('2d'), {
-    type: 'line',
-    data: {
-        labels: [],
-        datasets: [
-            { 
-                label: 'Xsens IMU', 
-                data: [], 
-                borderColor: 'rgb(59, 130, 246)', 
-                backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                tension: 0.1,
-                borderWidth: 2
+            plugins: {
+                legend: {
+                    labels: { color: '#dbeafe', boxWidth: 10, boxHeight: 10 },
+                },
             },
-            { 
-                label: 'IMU2', 
-                data: [], 
-                borderColor: 'rgb(239, 68, 68)', 
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                tension: 0.1,
-                borderWidth: 2
-            }
-        ]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: false,
-        scales: {
-            x: { display: false },
-            y: { 
-                beginAtZero: false,
-                title: { display: true, text: 'm/s²' }
-            }
         },
-        plugins: {
-            legend: { position: 'top' }
-        }
-    }
-});
+    });
+}
 
-// Gyroscope X Chart
-const gyroXChart = new Chart(document.getElementById('gyro-x-chart').getContext('2d'), {
-    type: 'line',
-    data: {
-        labels: [],
-        datasets: [
-            { 
-                label: 'Xsens IMU', 
-                data: [], 
-                borderColor: 'rgb(34, 197, 94)', 
-                backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                tension: 0.1,
-                borderWidth: 2
-            },
-            { 
-                label: 'IMU2', 
-                data: [], 
-                borderColor: 'rgb(168, 85, 247)', 
-                backgroundColor: 'rgba(168, 85, 247, 0.1)',
-                tension: 0.1,
-                borderWidth: 2
-            }
-        ]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: false,
-        scales: {
-            x: { display: false },
-            y: { 
-                beginAtZero: false,
-                title: { display: true, text: 'rad/s' }
-            }
-        },
-        plugins: {
-            legend: { position: 'top' }
-        }
-    }
-});
+const accChart = createAxisChart('acc-chart', 'Acc', 'm/s^2', ['#22c55e', '#06b6d4', '#a855f7']);
+const gyroChart = createAxisChart('gyro-chart', 'Gyr', 'rad/s', ['#60a5fa', '#f97316', '#ef4444']);
+const velocityChart = createAxisChart('velocity-chart', 'Vel', 'm/s', ['#f59e0b', '#14b8a6', '#8b5cf6']);
 
-// Gyroscope Y Chart
-const gyroYChart = new Chart(document.getElementById('gyro-y-chart').getContext('2d'), {
-    type: 'line',
-    data: {
-        labels: [],
-        datasets: [
-            { 
-                label: 'Xsens IMU', 
-                data: [], 
-                borderColor: 'rgb(34, 197, 94)', 
-                backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                tension: 0.1,
-                borderWidth: 2
-            },
-            { 
-                label: 'IMU2', 
-                data: [], 
-                borderColor: 'rgb(168, 85, 247)', 
-                backgroundColor: 'rgba(168, 85, 247, 0.1)',
-                tension: 0.1,
-                borderWidth: 2
-            }
-        ]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: false,
-        scales: {
-            x: { display: false },
-            y: { 
-                beginAtZero: false,
-                title: { display: true, text: 'rad/s' }
-            }
-        },
-        plugins: {
-            legend: { position: 'top' }
-        }
-    }
-});
+function pushChart(chart, values) {
+    if (!chart) return;
 
-// Gyroscope Z Chart
-const gyroZChart = new Chart(document.getElementById('gyro-z-chart').getContext('2d'), {
-    type: 'line',
-    data: {
-        labels: [],
-        datasets: [
-            { 
-                label: 'Xsens IMU', 
-                data: [], 
-                borderColor: 'rgb(34, 197, 94)', 
-                backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                tension: 0.1,
-                borderWidth: 2
-            },
-            { 
-                label: 'IMU2', 
-                data: [], 
-                borderColor: 'rgb(168, 85, 247)', 
-                backgroundColor: 'rgba(168, 85, 247, 0.1)',
-                tension: 0.1,
-                borderWidth: 2
-            }
-        ]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: false,
-        scales: {
-            x: { display: false },
-            y: { 
-                beginAtZero: false,
-                title: { display: true, text: 'rad/s' }
-            }
-        },
-        plugins: {
-            legend: { position: 'top' }
-        }
-    }
-});
-
-// Update comparison chart function
-function updateComparisonChart(chart, xsensValue, imu2Value) {
     if (chart.data.labels.length >= maxDataPoints) {
         chart.data.labels.shift();
-        chart.data.datasets[0].data.shift();
-        chart.data.datasets[1].data.shift();
+        chart.data.datasets.forEach((dataset) => dataset.data.shift());
     }
-    
-    const timestamp = new Date().toLocaleTimeString();
-    chart.data.labels.push(timestamp);
-    chart.data.datasets[0].data.push(xsensValue || 0);
-    chart.data.datasets[1].data.push(imu2Value || 0);
+
+    chart.data.labels.push(new Date().toLocaleTimeString());
+    chart.data.datasets.forEach((dataset, index) => {
+        dataset.data.push(isNumber(values[index]) ? values[index] : null);
+    });
     chart.update('none');
 }
 
-// Format value helper
-function formatValue(value, decimals = 3) {
-    if (value === null || value === undefined) return '--';
-    return typeof value === 'number' ? value.toFixed(decimals) : '--';
+function updateSpeedGauge(speed, maxSpeed = 200) {
+    const gauge = byId('xsens-gauge-fill');
+    const text = byId('xsens-gauge-speed');
+    if (!gauge || !text) return;
+
+    const safeSpeed = isNumber(speed) ? Math.max(speed, 0) : 0;
+    const circumference = 2 * Math.PI * 82;
+    const percentage = Math.min(safeSpeed / maxSpeed, 1);
+    gauge.style.strokeDashoffset = circumference * (1 - percentage);
+    text.textContent = String(Math.round(safeSpeed));
 }
 
-// Update status indicator
-function updateStatus(elementId, hasData) {
-    const element = document.getElementById(elementId);
-    if (element) {
-        element.className = hasData ? 'status-indicator status-ok' : 'status-indicator status-fail';
-    }
+function formatUtc(utc) {
+    if (!utc || utc.year === null || utc.month === null || utc.day === null) return '--';
+    const fullYear = utc.year > 99 ? utc.year : 2000 + utc.year;
+    const year = String(fullYear).padStart(4, '0');
+    const month = String(utc.month).padStart(2, '0');
+    const day = String(utc.day).padStart(2, '0');
+    const hour = String(utc.hour ?? 0).padStart(2, '0');
+    const minute = String(utc.minute ?? 0).padStart(2, '0');
+    const second = String(utc.second ?? 0).padStart(2, '0');
+    return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
 }
 
-// WebSocket event handlers
+function updateConnectionStatus(connected) {
+    const statusEl = byId('connection-status');
+    if (!statusEl) return;
+
+    statusEl.className = connected ? 'connection-indicator connected' : 'connection-indicator disconnected';
+    statusEl.innerHTML = `
+        <span class="status-dot"></span>
+        <span>${connected ? 'Connected' : 'Disconnected'}</span>
+    `;
+}
+
+function updateXsensDashboard(data) {
+    const xsens = data.xsens || {};
+    const gps = xsens.gps || {};
+    const velocity = xsens.velocity || {};
+    const acceleration = xsens.acceleration || {};
+    const freeAcceleration = xsens.free_acceleration || {};
+    const accelerationHr = xsens.acceleration_hr || {};
+    const rateOfTurn = xsens.rate_of_turn || {};
+    const rateOfTurnHr = xsens.rate_of_turn_hr || {};
+    const quaternion = xsens.quaternion || {};
+    const euler = xsens.euler || {};
+    const deltaV = xsens.delta_v || {};
+    const deltaQ = xsens.delta_q || {};
+    const magnetic = xsens.magnetic_field || {};
+    const status = xsens.status_word || {};
+    const gnssStatus = xsens.gnss_status || {};
+    const gnssDop = xsens.gnss_dop || {};
+    const ecef = xsens.position_ecef || {};
+
+    const hasGpsData = isNumber(gps.lat) && isNumber(gps.lon);
+    const hasFilterData = status.filter_valid === true || isNumber(quaternion.q0);
+    const hasMagData = isNumber(magnetic.mag_x) || isNumber(magnetic.mag_y) || isNumber(magnetic.mag_z);
+    const speedKmh = isNumber(velocity.speed_kmh)
+        ? velocity.speed_kmh
+        : (isNumber(velocity.vel_x) && isNumber(velocity.vel_y)
+            ? Math.sqrt((velocity.vel_x ** 2) + (velocity.vel_y ** 2)) * 3.6
+            : null);
+
+    setStatus('gps-status', hasGpsData || status.gnss_fix === true);
+    setStatus('imu-status', hasFilterData);
+    setStatus('mag-status', hasMagData);
+    setStatus('rtk-status', status.rtk_status === 1 || status.rtk_status === 2);
+
+    setText('gps-fix-label', status.gnss_fix === true ? 'Fix' : fixTypeLabel(gnssStatus.fix_type));
+    setText('filter-valid-label', status.filter_valid === true ? 'Valid' : 'Invalid');
+    setText('mag-valid-label', hasMagData ? 'Live' : 'No Data');
+    setText('rtk-status-label', rtkStatusLabel(status.rtk_status));
+
+    setText('message-count', String(data.message_count || 0));
+    setText('last-update', data.update_time ? new Date(data.update_time).toLocaleTimeString() : '--');
+
+    setText('xsens-gps-lat', formatUnit(gps.lat, 7, 'deg'));
+    setText('xsens-gps-lon', formatUnit(gps.lon, 7, 'deg'));
+    setText('xsens-gps-alt', formatUnit(gps.alt, 2, 'm'));
+    setText('xsens-speed-kmh', formatUnit(speedKmh, 2, 'km/h'));
+    updateSpeedGauge(speedKmh);
+    updateXsensGPSMap(gps.lat, gps.lon);
+
+    setText('xsens-q0', formatValue(quaternion.q0, 5));
+    setText('xsens-q1', formatValue(quaternion.q1, 5));
+    setText('xsens-q2', formatValue(quaternion.q2, 5));
+    setText('xsens-q3', formatValue(quaternion.q3, 5));
+    setText('xsens-roll', formatUnit(euler.roll, 2, 'deg'));
+    setText('xsens-pitch', formatUnit(euler.pitch, 2, 'deg'));
+    setText('xsens-yaw', formatUnit(euler.yaw, 2, 'deg'));
+    setText('xsens-dq0', formatValue(deltaQ.dq0, 5));
+    setText('xsens-dq1', formatValue(deltaQ.dq1, 5));
+    setText('xsens-dq2', formatValue(deltaQ.dq2, 5));
+    setText('xsens-dq3', formatValue(deltaQ.dq3, 5));
+
+    setText('xsens-acc-x', formatUnit(acceleration.acc_x, 3, 'm/s^2'));
+    setText('xsens-acc-y', formatUnit(acceleration.acc_y, 3, 'm/s^2'));
+    setText('xsens-acc-z', formatUnit(acceleration.acc_z, 3, 'm/s^2'));
+    setText('xsens-free-acc-x', formatUnit(freeAcceleration.x, 3, 'm/s^2'));
+    setText('xsens-free-acc-y', formatUnit(freeAcceleration.y, 3, 'm/s^2'));
+    setText('xsens-free-acc-z', formatUnit(freeAcceleration.z, 3, 'm/s^2'));
+    setText('xsens-hr-acc-x', formatUnit(accelerationHr.acc_x, 3, 'm/s^2'));
+    setText('xsens-hr-acc-y', formatUnit(accelerationHr.acc_y, 3, 'm/s^2'));
+    setText('xsens-hr-acc-z', formatUnit(accelerationHr.acc_z, 3, 'm/s^2'));
+    setText('xsens-gyr-x', formatUnit(rateOfTurn.gyr_x, 3, 'rad/s'));
+    setText('xsens-gyr-y', formatUnit(rateOfTurn.gyr_y, 3, 'rad/s'));
+    setText('xsens-gyr-z', formatUnit(rateOfTurn.gyr_z, 3, 'rad/s'));
+    setText('xsens-hr-gyr-x', formatUnit(rateOfTurnHr.gyr_x, 3, 'rad/s'));
+    setText('xsens-hr-gyr-y', formatUnit(rateOfTurnHr.gyr_y, 3, 'rad/s'));
+    setText('xsens-hr-gyr-z', formatUnit(rateOfTurnHr.gyr_z, 3, 'rad/s'));
+    setText('xsens-dv-x', formatUnit(deltaV.x, 5, 'm/s'));
+    setText('xsens-dv-y', formatUnit(deltaV.y, 5, 'm/s'));
+    setText('xsens-dv-z', formatUnit(deltaV.z, 5, 'm/s'));
+
+    setText('xsens-vel-x', formatUnit(velocity.vel_x, 3, 'm/s'));
+    setText('xsens-vel-y', formatUnit(velocity.vel_y, 3, 'm/s'));
+    setText('xsens-vel-z', formatUnit(velocity.vel_z, 3, 'm/s'));
+    setText('xsens-ecef-x', formatUnit(ecef.x, 2, 'm'));
+    setText('xsens-ecef-y', formatUnit(ecef.y, 2, 'm'));
+    setText('xsens-ecef-z', formatUnit(ecef.z, 2, 'm'));
+    setText('xsens-fix-type', fixTypeLabel(gnssStatus.fix_type));
+    setText('xsens-sats', gnssStatus.num_svs ?? gnssStatus.num_sv ?? '--');
+    setText('xsens-num-sv', gnssStatus.num_sv ?? '--');
+    setText('xsens-gnss-valid', gnssStatus.valid ?? '--');
+    setText('xsens-gnss-flags', gnssStatus.flags ?? '--');
+    setText('xsens-pdop', formatValue(gnssDop.pdop, 2));
+    setText('xsens-tdop', formatValue(gnssDop.tdop, 2));
+    setText('xsens-vdop', formatValue(gnssDop.vdop, 2));
+    setText('xsens-hdop', formatValue(gnssDop.hdop, 2));
+
+    setText('xsens-mag-x', formatValue(magnetic.mag_x, 5));
+    setText('xsens-mag-y', formatValue(magnetic.mag_y, 5));
+    setText('xsens-mag-z', formatValue(magnetic.mag_z, 5));
+    setText('xsens-temp', formatUnit(xsens.temperature?.temperature, 2, 'degC'));
+    setText('xsens-pressure', formatUnit(xsens.barometric_pressure?.pressure, 0, 'Pa'));
+    setText('xsens-utc', formatUtc(xsens.utc));
+
+    setText('xsens-self-test', formatBool(status.self_test_ok));
+    setText('xsens-filter-valid', formatBool(status.filter_valid));
+    setText('xsens-gnss-fix', formatBool(status.gnss_fix));
+    setText('xsens-no-rotation', status.no_rotation_status ?? '--');
+    setText('xsens-external-clock', formatBool(status.external_clock_synced));
+    setText('xsens-time-pulse', formatBool(status.have_gnss_time_pulse));
+    setText('xsens-clip-acc', formatClip(status.clip_acc_x, status.clip_acc_y, status.clip_acc_z));
+    setText('xsens-clip-gyr', formatClip(status.clip_gyr_x, status.clip_gyr_y, status.clip_gyr_z));
+    setText('xsens-clip-mag', formatClip(status.clip_mag_x, status.clip_mag_y, status.clip_mag_z));
+    setText('xsens-warning', xsens.warning?.warning_code ?? '--');
+    setText('xsens-sample-time', xsens.sample_time?.timestamp_us ?? '--');
+    setText('xsens-counter', xsens.group_counter?.counter ?? '--');
+
+    pushChart(accChart, [acceleration.acc_x, acceleration.acc_y, acceleration.acc_z]);
+    pushChart(gyroChart, [rateOfTurn.gyr_x, rateOfTurn.gyr_y, rateOfTurn.gyr_z]);
+    pushChart(velocityChart, [velocity.vel_x, velocity.vel_y, velocity.vel_z]);
+}
+
 ws.onopen = function() {
-    console.log('WebSocket Connected');
-    const statusEl = document.getElementById('connection-status');
-    statusEl.className = 'connection-indicator connected';
-    statusEl.innerHTML = '<span class="status-indicator"></span><span>Connected</span>';
+    updateConnectionStatus(true);
 };
 
 ws.onerror = function(error) {
-    console.error('WebSocket Error:', error);
+    console.error('WebSocket error:', error);
 };
 
 ws.onclose = function() {
-    console.log('WebSocket Disconnected');
-    const statusEl = document.getElementById('connection-status');
-    statusEl.className = 'connection-indicator disconnected';
-    statusEl.innerHTML = '<span class="status-indicator"></span><span>Disconnected</span>';
+    updateConnectionStatus(false);
     setTimeout(() => location.reload(), 5000);
 };
 
-// Calculate distance between two GPS coordinates (Haversine formula)
-function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371e3; // Earth radius in meters
-    const φ1 = lat1 * Math.PI / 180;
-    const φ2 = lat2 * Math.PI / 180;
-    const Δφ = (lat2 - lat1) * Math.PI / 180;
-    const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                Math.cos(φ1) * Math.cos(φ2) *
-                Math.sin(Δλ/2) * Math.sin(Δλ/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-    return R * c; // Distance in meters
-}
-
-// Update speed gauge
-function updateSpeedGauge(gaugeId, speedTextId, speed, maxSpeed = 200) {
-    const gauge = document.getElementById(gaugeId);
-    const speedText = document.getElementById(speedTextId);
-    
-    if (gauge && speedText) {
-        const circumference = 2 * Math.PI * 80; // radius = 80
-        const percentage = Math.min(speed / maxSpeed, 1);
-        const offset = circumference * (1 - percentage);
-        
-        gauge.style.strokeDashoffset = offset;
-        speedText.textContent = Math.round(speed);
-    }
-}
-
-// Update difference indicator
-function updateDiffIndicator(elementId, value, thresholdGood, thresholdWarn, suffix = '') {
-    const el = document.getElementById(elementId);
-    if (el) {
-        const absValue = Math.abs(value);
-        let className = 'diff-indicator ';
-        
-        if (absValue <= thresholdGood) {
-            className += 'diff-good';
-        } else if (absValue <= thresholdWarn) {
-            className += 'diff-warn';
-        } else {
-            className += 'diff-error';
-        }
-        
-        el.className = className;
-        el.textContent = `±${absValue.toFixed(suffix === 'm' ? 1 : 4)}${suffix}`;
-    }
-}
-
-// Main data update handler
 ws.onmessage = function(event) {
     const data = JSON.parse(event.data);
-    
-    // 更新连接状态显示
-    const connectionStatus = document.getElementById('connection-status');
-    if (data.vehicle_connected) {
-        connectionStatus.className = 'connection-indicator connected';
-        connectionStatus.innerHTML = `
-            <span class="status-indicator"></span>
-            <span>Connected</span>
-        `;
-    } else {
-        connectionStatus.className = 'connection-indicator disconnected';
-        connectionStatus.innerHTML = `
-            <span class="status-indicator"></span>
-            <span>Disconnected</span>
-        `;
+    if (!Object.prototype.hasOwnProperty.call(data, 'message_count') && !Object.prototype.hasOwnProperty.call(data, 'xsens')) {
+        return;
     }
-    
-    // Debug: Log received data with full structure
-    console.log('Received data:', {
-        hasXsens: !!data.xsens,
-        hasGPS: !!data.gps,
-        hasIMU2: !!data.imu2,
-        hasVelocity: !!data.velocity,
-        xsensGPS: data.xsens?.gps,
-        legacyGPS: data.gps,
-        xsensAcceleration: data.xsens?.acceleration,
-        xsensVelocity: data.xsens?.velocity,
-        imu2Full: data.imu2,
-        xsensFull: data.xsens
-    });
-    
-    // Update message count
-    document.getElementById('message-count').textContent = data.message_count || 0;
-    
-    // Update Xsens data
-    if (data.xsens) {
-        const xsens = data.xsens;
-        
-        // Check if we have any data
-        const hasGPSData = xsens.gps && (xsens.gps.lat !== null || xsens.gps.lon !== null);
-        const hasIMUData = xsens.quaternion && xsens.quaternion.q0 !== null;
-        const hasMagData = xsens.magnetic_field && xsens.magnetic_field.mag_x !== null;
-        
-        updateStatus('gps-status', hasGPSData);
-        updateStatus('imu-status', hasIMUData);
-        updateStatus('mag-status', hasMagData);
-        
-        // Xsens GPS Data
-        let xsensLat = null, xsensLon = null, xsensAlt = null, xsensSpeed = 0;
-        if (xsens.gps) {
-            xsensLat = xsens.gps.lat;
-            xsensLon = xsens.gps.lon;
-            xsensAlt = xsens.gps.alt;
-            
-            document.getElementById('xsens-gps-lat').textContent = formatValue(xsensLat, 7) + '°';
-            document.getElementById('xsens-gps-lon').textContent = formatValue(xsensLon, 7) + '°';
-            document.getElementById('xsens-gps-alt').textContent = formatValue(xsensAlt, 2) + ' m';
-            
-            updateXsensGPSMap(xsensLat, xsensLon);
-        }
-        
-        // Calculate Xsens speed from velocity
-        if (xsens.velocity) {
-            document.getElementById('xsens-vel-x').textContent = formatValue(xsens.velocity.vel_x, 3);
-            document.getElementById('xsens-vel-y').textContent = formatValue(xsens.velocity.vel_y, 3);
-            document.getElementById('xsens-vel-z').textContent = formatValue(xsens.velocity.vel_z, 3);
-            
-            if (xsens.velocity.vel_x !== null && xsens.velocity.vel_y !== null) {
-                const speedMs = Math.sqrt(
-                    xsens.velocity.vel_x ** 2 + 
-                    xsens.velocity.vel_y ** 2
-                );
-                xsensSpeed = speedMs * 3.6; // km/h
-                document.getElementById('xsens-gps-speed').textContent = formatValue(xsensSpeed, 2) + ' km/h';
-                updateSpeedGauge('xsens-gauge-fill', 'xsens-gauge-speed', xsensSpeed);
-            }
-        }
-        
-        // Acceleration - Update comparison charts
-        if (xsens.acceleration) {
-            const xsensAccX = xsens.acceleration.acc_x || 0;
-            const xsensAccY = xsens.acceleration.acc_y || 0;
-            const xsensAccZ = xsens.acceleration.acc_z || 0;
-            
-            // Get IMU2 data (nested structure: imu2.accel.x/y/z)
-            // Convert from g to m/s² by multiplying by 9.81
-            const imu2AccX = (data.imu2?.accel?.x || 0) * 9.81;
-            const imu2AccY = (data.imu2?.accel?.y || 0) * 9.81;
-            const imu2AccZ = (data.imu2?.accel?.z || 0) * 9.81;
-            
-            updateComparisonChart(accXChart, xsensAccX, imu2AccX);
-            updateComparisonChart(accYChart, xsensAccY, imu2AccY);
-            updateComparisonChart(accZChart, xsensAccZ, imu2AccZ);
-        }
-        
-        // Rate of Turn (Gyroscope) - Update comparison charts
-        if (xsens.rate_of_turn) {
-            const xsensGyrX = xsens.rate_of_turn.gyr_x || 0;
-            const xsensGyrY = xsens.rate_of_turn.gyr_y || 0;
-            const xsensGyrZ = xsens.rate_of_turn.gyr_z || 0;
-            
-            // Get IMU2 data (nested structure: imu2.gyro.x/y/z)
-            const imu2GyrX = data.imu2?.gyro?.x || 0;
-            const imu2GyrY = data.imu2?.gyro?.y || 0;
-            const imu2GyrZ = data.imu2?.gyro?.z || 0;
-            
-            updateComparisonChart(gyroXChart, xsensGyrX, imu2GyrX);
-            updateComparisonChart(gyroYChart, xsensGyrY, imu2GyrY);
-            updateComparisonChart(gyroZChart, xsensGyrZ, imu2GyrZ);
-        }
-        
-        // Delta V
-        if (xsens.delta_v) {
-            document.getElementById('xsens-deltav-x').textContent = formatValue(xsens.delta_v.x, 5);
-            document.getElementById('xsens-deltav-y').textContent = formatValue(xsens.delta_v.y, 5);
-            document.getElementById('xsens-deltav-z').textContent = formatValue(xsens.delta_v.z, 5);
-        }
-        
-        // Delta Q
-        if (xsens.delta_q) {
-            document.getElementById('xsens-deltaq-w').textContent = formatValue(xsens.delta_q.dq0, 5);
-            document.getElementById('xsens-deltaq-x').textContent = formatValue(xsens.delta_q.dq1, 5);
-            document.getElementById('xsens-deltaq-y').textContent = formatValue(xsens.delta_q.dq2, 5);
-            document.getElementById('xsens-deltaq-z').textContent = formatValue(xsens.delta_q.dq3, 5);
-        }
-    }
-
-    // Legacy GPS comparison (outside xsens block)
-    if (data.gps) {
-        const legacyLat = data.gps.lat;
-        const legacyLon = data.gps.lon;
-        const legacyAlt = data.gps.alt;
-        const legacySpeed = data.velocity?.speed_kmh || 0;
-        
-        document.getElementById('legacy-gps-lat').textContent = formatValue(legacyLat, 7) + '°';
-        document.getElementById('legacy-gps-lon').textContent = formatValue(legacyLon, 7) + '°';
-        document.getElementById('legacy-gps-alt').textContent = formatValue(legacyAlt, 2) + ' m';
-        document.getElementById('legacy-gps-speed').textContent = formatValue(legacySpeed, 2) + ' km/h';
-        updateSpeedGauge('legacy-gauge-fill', 'legacy-gauge-speed', legacySpeed);
-        
-        updateLegacyGPSMap(legacyLat, legacyLon);
-        
-        // Calculate differences only if xsens data exists
-        if (data.xsens && data.xsens.gps) {
-            const xsensLat = data.xsens.gps.lat;
-            const xsensLon = data.xsens.gps.lon;
-            const xsensAlt = data.xsens.gps.alt;
-            
-            // Calculate Xsens speed
-            let xsensSpeed = 0;
-            if (data.xsens.velocity && data.xsens.velocity.vel_x !== null && data.xsens.velocity.vel_y !== null) {
-                const speedMs = Math.sqrt(
-                    data.xsens.velocity.vel_x ** 2 + 
-                    data.xsens.velocity.vel_y ** 2
-                );
-                xsensSpeed = speedMs * 3.6;
-            }
-            
-            if (xsensLat !== null && legacyLat !== null) {
-                const latDiff = xsensLat - legacyLat;
-                const lonDiff = xsensLon - legacyLon;
-                const altDiff = xsensAlt - legacyAlt;
-                const speedDiff = xsensSpeed - legacySpeed;
-                
-                updateDiffIndicator('lat-diff', latDiff, 0.0001, 0.001);
-                updateDiffIndicator('lon-diff', lonDiff, 0.0001, 0.001);
-                updateDiffIndicator('alt-diff', altDiff, 5, 20, ' m');
-                updateDiffIndicator('speed-diff', speedDiff, 2, 5, ' km/h');
-                
-                // Calculate distance difference
-                const distance = calculateDistance(legacyLat, legacyLon, xsensLat, xsensLon);
-                document.getElementById('gps-distance-diff').textContent = formatValue(distance, 2) + ' m';
-            }
-        }
-    }
+    updateConnectionStatus(Boolean(data.vehicle_connected));
+    updateXsensDashboard(data);
 };
 
-// GPS Tracking Controls
-document.getElementById('toggle-legacy-track-btn').addEventListener('click', function() {
-    legacyTrackingEnabled = !legacyTrackingEnabled;
-    this.textContent = legacyTrackingEnabled ? 'Stop Track' : 'Start Track';
-    this.style.background = legacyTrackingEnabled ? 'rgba(239, 68, 68, 0.5)' : 'rgba(34, 197, 94, 0.5)';
-});
-
-document.getElementById('clear-legacy-track-btn').addEventListener('click', function() {
-    legacyPathPoints = [];
-    if (legacyPathPolyline) {
-        legacyMap.removeLayer(legacyPathPolyline);
-        legacyPathPolyline = null;
-    }
-});
-
-document.getElementById('toggle-xsens-track-btn').addEventListener('click', function() {
-    xsensTrackingEnabled = !xsensTrackingEnabled;
-    this.textContent = xsensTrackingEnabled ? 'Stop Track' : 'Start Track';
-    this.style.background = xsensTrackingEnabled ? 'rgba(239, 68, 68, 0.5)' : 'rgba(34, 197, 94, 0.5)';
-});
-
-document.getElementById('clear-xsens-track-btn').addEventListener('click', function() {
-    xsensPathPoints = [];
-    if (xsensPathPolyline) {
-        xsensMap.removeLayer(xsensPathPolyline);
-        xsensPathPolyline = null;
-    }
-});
-
-// Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
+    setupMap();
+
+    const toggleTrackButton = byId('toggle-xsens-track-btn');
+    const clearTrackButton = byId('clear-xsens-track-btn');
+
+    if (toggleTrackButton) {
+        toggleTrackButton.addEventListener('click', function() {
+            xsensTrackingEnabled = !xsensTrackingEnabled;
+            this.textContent = xsensTrackingEnabled ? 'Stop Track' : 'Start Track';
+            this.classList.toggle('danger', xsensTrackingEnabled);
+        });
+    }
+
+    if (clearTrackButton) {
+        clearTrackButton.addEventListener('click', function() {
+            xsensPathPoints = [];
+            if (xsensPathPolyline && xsensMap) {
+                xsensMap.removeLayer(xsensPathPolyline);
+                xsensPathPolyline = null;
+            }
+        });
+    }
 });

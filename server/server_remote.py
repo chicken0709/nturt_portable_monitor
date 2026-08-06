@@ -11,6 +11,7 @@ import hmac
 import os
 import asyncio
 import hashlib
+from pathlib import Path
 from urllib.parse import parse_qs
 import uvicorn
 import websockets
@@ -26,8 +27,24 @@ from can_decoder import CANDecoder
 from candecoder_service import CANDecoderSyncService
 
 # Configuration
-WEB_PORT  = 8888  # server hosting port
-DATA_PORT = 8889  # port for client connections
+SERVER_DIR = Path(__file__).resolve().parent
+
+
+def env_int(name, default):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        print(f"Invalid {name}={value!r}; using {default}.")
+        return default
+
+
+WEB_HOST = os.environ.get("NTURT_WEB_HOST", "0.0.0.0")
+DATA_HOST = os.environ.get("NTURT_DATA_HOST", "0.0.0.0")
+WEB_PORT = env_int("NTURT_WEB_PORT", 8888)  # server hosting port
+DATA_PORT = env_int("NTURT_DATA_PORT", 8889)  # port for client connections
 ADMINSHELL_USERNAME = os.environ.get("ADMINSHELL_USERNAME", "nturt")
 ADMINSHELL_PASSWORD = os.environ.get("ADMINSHELL_PASSWORD", "nturt03734301")
 ADMINSHELL_COOKIE_NAME = "adminshell_session"
@@ -47,8 +64,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-templates = Jinja2Templates(directory="templates")
-app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory=str(SERVER_DIR / "templates"))
+app.mount("/static", StaticFiles(directory=str(SERVER_DIR / "static")), name="static")
 
 # WebSocket connections for web clients
 web_connections: List[WebSocket] = []
@@ -588,6 +605,68 @@ async def get_candecoder_status(request: Request):
     status['vehicle_clients'] = len(vehicle_clients)
     return status
 
+@app.get('/api/candecoder/workspace')
+async def get_candecoder_workspace(request: Request):
+    denied = _protected_api_denied(request)
+    if denied:
+        return denied
+    if not can_server:
+        return {'error': 'CAN server not initialized'}
+    try:
+        return can_server.candecoder_sync.workspace_tree()
+    except Exception as e:
+        return {'error': str(e)}
+
+@app.get('/api/candecoder/workspace/file')
+async def get_candecoder_workspace_file(request: Request):
+    denied = _protected_api_denied(request)
+    if denied:
+        return denied
+    if not can_server:
+        return {'error': 'CAN server not initialized'}
+    try:
+        return can_server.candecoder_sync.read_workspace_file(request.query_params.get('path'))
+    except Exception as e:
+        return {'error': str(e)}
+
+@app.post('/api/candecoder/workspace/file/save')
+async def save_candecoder_workspace_file(request: Request):
+    denied = _protected_api_denied(request)
+    if denied:
+        return denied
+    if not can_server:
+        return {'error': 'CAN server not initialized'}
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    try:
+        return can_server.candecoder_sync.save_workspace_file(
+            data.get('relative_path'),
+            data.get('content'),
+        )
+    except Exception as e:
+        return {'error': str(e)}
+
+@app.post('/api/candecoder/workspace/move')
+async def move_candecoder_workspace_item(request: Request):
+    denied = _protected_api_denied(request)
+    if denied:
+        return denied
+    if not can_server:
+        return {'error': 'CAN server not initialized'}
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    try:
+        return can_server.candecoder_sync.move_workspace_item(
+            data.get('source_relative_path'),
+            data.get('destination_relative_path'),
+        )
+    except Exception as e:
+        return {'error': str(e)}
+
 @app.post('/api/candecoder/list')
 async def list_candecoder_files(request: Request):
     denied = _protected_api_denied(request)
@@ -816,8 +895,13 @@ async def start_vehicle_data_server():
     broadcaster_task = asyncio.create_task(can_server.broadcaster_loop())
     
     # start WebSocket server to receive vehicle data
-    async with websockets.serve(can_server.handle_vehicle_client, "0.0.0.0", DATA_PORT):
-        print(f"Vehicle data server listening on port {DATA_PORT}")
+    try:
+        async with websockets.serve(can_server.handle_vehicle_client, DATA_HOST, DATA_PORT):
+            print(f"Vehicle data server listening on {DATA_HOST}:{DATA_PORT}")
+            await broadcaster_task
+    except OSError as e:
+        print(f"Vehicle data server failed to bind {DATA_HOST}:{DATA_PORT}: {e}")
+        print("Set NTURT_DATA_PORT to another port if this port is blocked or reserved.")
         await broadcaster_task
 
 @app.on_event("startup")
@@ -829,9 +913,9 @@ if __name__ == '__main__':
     print("=" * 70)
     print("NTURT CAN Monitor Server - Remote Side")
     print("=" * 70)
-    print(f"Web Dashboard: http://0.0.0.0:{WEB_PORT}")
-    print(f"Vehicle Data Port: {DATA_PORT}")
+    print(f"Web Dashboard: http://{WEB_HOST}:{WEB_PORT}")
+    print(f"Vehicle Data Server: {DATA_HOST}:{DATA_PORT}")
     print("Press Ctrl+C to stop the server.")
     print("=" * 70)
     
-    uvicorn.run(app, host='0.0.0.0', port=WEB_PORT)
+    uvicorn.run(app, host=WEB_HOST, port=WEB_PORT)

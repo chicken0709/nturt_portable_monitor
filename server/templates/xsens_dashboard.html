@@ -3,369 +3,259 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Xsens IMU & GPS Monitor - NTUR</title>
+    <title>Xsens Dashboard - NTUR</title>
     <link rel="icon" href="/static/images/logo.png" type="image/png">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="/static/js/xsens_dashboard.js" defer></script>
     <link rel="stylesheet" href="/static/css/xsens_dashboard.css">
+    <script src="/static/js/xsens_dashboard.js" defer></script>
 </head>
 <body>
-    <!-- Home Button -->
-    <a href="/" class="home-button">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <a href="/" class="home-button" aria-label="Back to home">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
         </svg>
         <span>Home</span>
     </a>
-    <!-- Connection Indicator -->
+
     <div id="connection-status" class="connection-indicator disconnected">
-        <span class="status-indicator"></span>
+        <span class="status-dot"></span>
         <span>Disconnected</span>
     </div>
 
-    <div class="container mx-auto px-4 py-6">
-        <!-- Header -->
-        <div class="glass-card" style="border-left: 4px solid #a855f7; margin-bottom: 24px;">
-            <div class="flex items-center justify-between">
+    <main class="container">
+        <header class="glass-card hero-card">
+            <div>
+                <p class="eyebrow">Xsens MTi-600 Series</p>
+                <h1>Xsens Dashboard</h1>
+                <p class="hero-subtitle">CAN DBC big-endian decoded sensor stream</p>
+            </div>
+            <div class="hero-stats">
                 <div>
-                    <h1 class="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">Xsens MTi-680 Dashboard</h1>
-                    <p class="text-blue-300 text-lg mt-2">IMU & GPS Real-time Monitor</p>
+                    <span>Messages</span>
+                    <strong id="message-count">0</strong>
                 </div>
-                <div class="text-right">
-                    <div class="text-sm" style="color: #94a3b8;">Data Rate</div>
-                    <div id="message-count" class="text-3xl font-bold" style="color: #60a5fa;">0</div>
-                    <div class="text-sm mt-1">
-                        <span class="status-indicator status-ok" style="margin-right: 8px;"></span>
-                        <span style="color: #22c55e;">Live</span>
-                    </div>
+                <div>
+                    <span>Last Update</span>
+                    <strong id="last-update">--</strong>
                 </div>
             </div>
-        </div>
+        </header>
 
-        
-
-        <!-- GPS Comparison Section -->
-        <div class="glass-card comparison" style="margin-bottom: 24px; padding: 20px; border-radius: 12px; background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(51, 65, 85, 0.5);">
-            
-            <div class="section-title" style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
-                <div class="section-icon" style="background: #06b6d4; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 50%; color: white;">📍</div>
-                <div style="font-weight: bold; color: white; font-size: 1.1rem;">GPS Sources Comparison</div>
+        <section class="status-grid">
+            <div class="glass-card status-card">
+                <span>GPS</span>
+                <strong id="gps-fix-label">No Fix</strong>
+                <i id="gps-status" class="status-dot fail"></i>
             </div>
-            
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px;">
-                
-                <!-- Legacy GPS -->
-                <div class="gps-source legacy">
-                    <h3 style="color: #f59e0b; font-size: 1.125rem; font-weight: bold; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">🛰️ Legacy GPS</h3>
-                    
-                    <div style="margin-top: 25px; display: flex; flex-direction: column; gap: 10px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; height: 45px; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                            <div class="label-text" style="font-size: 12px; color: #94a3b8;">Latitude</div>
-                            <div id="legacy-gps-lat" class="value-display" style="color: white; font-weight: 500;">--</div>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; height: 45px; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                            <div class="label-text" style="font-size: 12px; color: #94a3b8;">Longitude</div>
-                            <div id="legacy-gps-lon" class="value-display" style="color: white; font-weight: 500;">--</div>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; height: 45px; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                            <div class="label-text" style="font-size: 12px; color: #94a3b8;">Altitude</div>
-                            <div id="legacy-gps-alt" class="value-display" style="color: white; font-weight: 500;">--</div>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; height: 45px; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                            <div class="label-text" style="font-size: 12px; color: #94a3b8;">Speed</div>
-                            <div id="legacy-gps-speed" class="value-display" style="color: white; font-weight: 500;">--</div>
-                        </div>
+            <div class="glass-card status-card">
+                <span>Filter</span>
+                <strong id="filter-valid-label">Invalid</strong>
+                <i id="imu-status" class="status-dot fail"></i>
+            </div>
+            <div class="glass-card status-card">
+                <span>Magnetometer</span>
+                <strong id="mag-valid-label">No Data</strong>
+                <i id="mag-status" class="status-dot fail"></i>
+            </div>
+            <div class="glass-card status-card">
+                <span>RTK</span>
+                <strong id="rtk-status-label">--</strong>
+                <i id="rtk-status" class="status-dot fail"></i>
+            </div>
+        </section>
+
+        <section class="gps-layout">
+            <div class="glass-card position-card">
+                <div class="section-title">
+                    <span class="section-icon blue"></span>
+                    Position
+                </div>
+                <div class="metric-grid two-cols">
+                    <div class="metric">
+                        <span>Latitude</span>
+                        <strong id="xsens-gps-lat">--</strong>
                     </div>
-                    
-                    <!-- Legacy GPS Speed Gauge -->
-                    <div style="position: relative; width: 160px; height: 160px; margin: 30px auto 0;">
-                        <svg viewBox="0 0 200 200" style="transform: rotate(-90deg); width: 100%; height: 100%;">
-                            <circle cx="100" cy="100" r="85" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="12"></circle>
-                            <circle id="legacy-gauge-fill" cx="100" cy="100" r="85" fill="none" stroke="#f59e0b" stroke-width="12" 
-                                    stroke-dasharray="534" stroke-dashoffset="534" stroke-linecap="round" style="transition: stroke-dashoffset 0.5s ease;"></circle>
-                        </svg>
-                        <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                            <div id="legacy-gauge-speed" style="color: #f59e0b; font-size: 32px; font-weight: bold; line-height: 1;">0</div>
-                            <div style="color: #64748b; font-size: 10px; text-transform: uppercase;">km/h</div>
-                        </div>
+                    <div class="metric">
+                        <span>Longitude</span>
+                        <strong id="xsens-gps-lon">--</strong>
+                    </div>
+                    <div class="metric">
+                        <span>Altitude</span>
+                        <strong id="xsens-gps-alt">--</strong>
+                    </div>
+                    <div class="metric">
+                        <span>Speed</span>
+                        <strong id="xsens-speed-kmh">--</strong>
                     </div>
                 </div>
 
-                <!-- Xsens GPS -->
-                <div class="gps-source xsens">
-                    <h3 style="color: #3b82f6; font-size: 1.125rem; font-weight: bold; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">🛰️ Xsens GPS</h3>
-                    
-                    <div style="margin-top: 25px; display: flex; flex-direction: column; gap: 10px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; height: 45px; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                            <div class="label-text" style="font-size: 12px; color: #94a3b8;">Latitude</div>
-                            <div style="text-align: right; display: flex; align-items: center; gap: 8px;">
-                                <div id="xsens-gps-lat" class="value-display" style="color: white; font-weight: 500;">--</div>
-                                <span id="lat-diff" class="diff-indicator" style="font-size: 10px; color: #4ade80; font-weight: bold;">±0.0000</span>
-                            </div>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; height: 45px; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                            <div class="label-text" style="font-size: 12px; color: #94a3b8;">Longitude</div>
-                            <div style="text-align: right; display: flex; align-items: center; gap: 8px;">
-                                <div id="xsens-gps-lon" class="value-display" style="color: white; font-weight: 500;">--</div>
-                                <span id="lon-diff" class="diff-indicator" style="font-size: 10px; color: #4ade80; font-weight: bold;">±0.0000</span>
-                            </div>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; height: 45px; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                            <div class="label-text" style="font-size: 12px; color: #94a3b8;">Altitude</div>
-                            <div style="text-align: right; display: flex; align-items: center; gap: 8px;">
-                                <div id="xsens-gps-alt" class="value-display" style="color: white; font-weight: 500;">--</div>
-                                <span id="alt-diff" class="diff-indicator" style="font-size: 10px; color: #4ade80; font-weight: bold;">±0.0 m</span>
-                            </div>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; height: 45px; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                            <div class="label-text" style="font-size: 12px; color: #94a3b8;">Speed</div>
-                            <div style="text-align: right; display: flex; align-items: center; gap: 8px;">
-                                <div id="xsens-gps-speed" class="value-display" style="color: white; font-weight: 500;">--</div>
-                                <span id="speed-diff" class="diff-indicator" style="font-size: 10px; color: #4ade80; font-weight: bold;">±0.0 km/h</span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Xsens GPS Speed Gauge -->
-                    <div style="position: relative; width: 160px; height: 160px; margin: 30px auto 0;">
-                        <svg viewBox="0 0 200 200" style="transform: rotate(-90deg); width: 100%; height: 100%;">
-                            <circle cx="100" cy="100" r="85" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="12"></circle>
-                            <circle id="xsens-gauge-fill" cx="100" cy="100" r="85" fill="none" stroke="#3b82f6" stroke-width="12" 
-                                    stroke-dasharray="534" stroke-dashoffset="534" stroke-linecap="round" style="transition: stroke-dashoffset 0.5s ease;"></circle>
-                        </svg>
-                        <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                            <div id="xsens-gauge-speed" style="color: #3b82f6; font-size: 32px; font-weight: bold; line-height: 1;">0</div>
-                            <div style="color: #64748b; font-size: 10px; text-transform: uppercase;">km/h</div>
-                        </div>
+                <div class="speed-gauge" aria-label="Xsens speed">
+                    <svg viewBox="0 0 200 200">
+                        <circle class="gauge-bg" cx="100" cy="100" r="82"></circle>
+                        <circle id="xsens-gauge-fill" class="gauge-fill" cx="100" cy="100" r="82"></circle>
+                    </svg>
+                    <div class="gauge-text">
+                        <strong id="xsens-gauge-speed">0</strong>
+                        <span>km/h</span>
                     </div>
                 </div>
             </div>
 
-            <!-- Distance Difference -->
-            <div style="margin-top: 24px; padding: 16px; background: rgba(15, 23, 42, 0.5); border-radius: 8px; text-align: center;">
-                <div class="label-text" style="font-size: 12px; color: #94a3b8; margin-bottom: 4px;">Distance Difference</div>
-                <div id="gps-distance-diff" style="font-size: 24px; font-weight: bold; color: #06b6d4;">-- m</div>
-            </div>
-        </div>
-
-        <!-- Main Grid Layout -->
-        <!-- GPS Maps Section -->
-        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
-            <!-- Legacy GPS Map -->
-            <div class="glass-card gps">
-                <div class="flex items-center justify-between mb-4">
-                    <div class="section-title" style="margin-bottom: 0;">
-                        <div class="section-icon" style="background: #f59e0b;">🗺️</div>
-                        Legacy GPS Track
+            <div class="glass-card map-card">
+                <div class="section-title-row">
+                    <div class="section-title">
+                        <span class="section-icon cyan"></span>
+                        GPS Track
                     </div>
-                    <div class="flex gap-2">
-                        <button id="toggle-legacy-track-btn" style="background: rgba(34, 197, 94, 0.5); color: #e2e8f0; padding: 6px 12px; border-radius: 6px; font-size: 0.875rem; cursor: pointer; border: 1px solid rgba(148, 163, 184, 0.3); transition: all 0.2s;" onmouseover="this.style.background='rgba(34, 197, 94, 0.7)'" onmouseout="this.style.background='rgba(34, 197, 94, 0.5)'">
-                            Start Track
-                        </button>
-                        <button id="clear-legacy-track-btn" style="background: rgba(107, 114, 128, 0.5); color: #e2e8f0; padding: 6px 12px; border-radius: 6px; font-size: 0.875rem; cursor: pointer; border: 1px solid rgba(148, 163, 184, 0.3); transition: all 0.2s;" onmouseover="this.style.background='rgba(107, 114, 128, 0.7)'" onmouseout="this.style.background='rgba(107, 114, 128, 0.5)'">
-                            Clear Track
-                        </button>
-                    </div>
-                </div>
-                <div id="legacy-map" class="map-container"></div>
-            </div>
-
-            <!-- Xsens GPS Map -->
-            <div class="glass-card gps">
-                <div class="flex items-center justify-between mb-4">
-                    <div class="section-title" style="margin-bottom: 0;">
-                        <div class="section-icon" style="background: #3b82f6;">🗺️</div>
-                        Xsens GPS Track
-                    </div>
-                    <div class="flex gap-2">
-                        <button id="toggle-xsens-track-btn" style="background: rgba(34, 197, 94, 0.5); color: #e2e8f0; padding: 6px 12px; border-radius: 6px; font-size: 0.875rem; cursor: pointer; border: 1px solid rgba(148, 163, 184, 0.3); transition: all 0.2s;" onmouseover="this.style.background='rgba(34, 197, 94, 0.7)'" onmouseout="this.style.background='rgba(34, 197, 94, 0.5)'">
-                            Start Track
-                        </button>
-                        <button id="clear-xsens-track-btn" style="background: rgba(107, 114, 128, 0.5); color: #e2e8f0; padding: 6px 12px; border-radius: 6px; font-size: 0.875rem; cursor: pointer; border: 1px solid rgba(148, 163, 184, 0.3); transition: all 0.2s;" onmouseover="this.style.background='rgba(107, 114, 128, 0.7)'" onmouseout="this.style.background='rgba(107, 114, 128, 0.5)'">
-                            Clear Track
-                        </button>
+                    <div class="button-row">
+                        <button id="toggle-xsens-track-btn" type="button">Start Track</button>
+                        <button id="clear-xsens-track-btn" type="button">Clear</button>
                     </div>
                 </div>
                 <div id="xsens-map" class="map-container"></div>
             </div>
-        </div>
+        </section>
 
-        <!-- IMU Comparison Charts Section -->
-        <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
-            <!-- Acceleration X Chart -->
-            <div class="glass-card imu">
+        <section class="chart-grid">
+            <div class="glass-card">
                 <div class="section-title">
-                    <div class="section-icon" style="background: #22c55e;">📊</div>
-                    Acceleration X (m/s²)
+                    <span class="section-icon green"></span>
+                    Acceleration
                 </div>
                 <div class="chart-container">
-                    <canvas id="acc-x-chart"></canvas>
+                    <canvas id="acc-chart"></canvas>
                 </div>
             </div>
-
-            <!-- Acceleration Y Chart -->
-            <div class="glass-card imu">
+            <div class="glass-card">
                 <div class="section-title">
-                    <div class="section-icon" style="background: #22c55e;">📊</div>
-                    Acceleration Y (m/s²)
+                    <span class="section-icon purple"></span>
+                    Rate Of Turn
                 </div>
                 <div class="chart-container">
-                    <canvas id="acc-y-chart"></canvas>
+                    <canvas id="gyro-chart"></canvas>
                 </div>
             </div>
-
-            <!-- Acceleration Z Chart -->
-            <div class="glass-card imu">
+            <div class="glass-card">
                 <div class="section-title">
-                    <div class="section-icon" style="background: #22c55e;">📊</div>
-                    Acceleration Z (m/s²)
-                </div>
-                <div class="chart-container">
-                    <canvas id="acc-z-chart"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <!-- Gyroscope Charts -->
-        <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
-            <!-- Gyroscope X Chart -->
-            <div class="glass-card imu">
-                <div class="section-title">
-                    <div class="section-icon" style="background: #3b82f6;">📊</div>
-                    Gyroscope X (rad/s)
-                </div>
-                <div class="chart-container">
-                    <canvas id="gyro-x-chart"></canvas>
-                </div>
-            </div>
-
-            <!-- Gyroscope Y Chart -->
-            <div class="glass-card imu">
-                <div class="section-title">
-                    <div class="section-icon" style="background: #3b82f6;">📊</div>
-                    Gyroscope Y (rad/s)
-                </div>
-                <div class="chart-container">
-                    <canvas id="gyro-y-chart"></canvas>
-                </div>
-            </div>
-
-            <!-- Gyroscope Z Chart -->
-            <div class="glass-card imu">
-                <div class="section-title">
-                    <div class="section-icon" style="background: #3b82f6;">📊</div>
-                    Gyroscope Z (rad/s)
-                </div>
-                <div class="chart-container">
-                    <canvas id="gyro-z-chart"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <!-- Additional Data Rows -->
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-6">
-            <!-- Delta V -->
-            <div class="glass-card imu">
-                <div class="section-title" style="font-size: 1rem;">
-                    <div class="section-icon" style="background: #22c55e; width: 20px; height: 20px; font-size: 0.75rem;">Δ</div>
-                    Delta V
-                </div>
-                <div class="grid grid-cols-3 gap-2 mt-2">
-                    <div>
-                        <div class="label-text">X</div>
-                        <div id="xsens-deltav-x" class="value-display" style="font-size: 0.875rem;">--</div>
-                    </div>
-                    <div>
-                        <div class="label-text">Y</div>
-                        <div id="xsens-deltav-y" class="value-display" style="font-size: 0.875rem;">--</div>
-                    </div>
-                    <div>
-                        <div class="label-text">Z</div>
-                        <div id="xsens-deltav-z" class="value-display" style="font-size: 0.875rem;">--</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Delta Q -->
-            <div class="glass-card quaternion">
-                <div class="section-title" style="font-size: 1rem;">
-                    <div class="section-icon" style="background: #a855f7; width: 20px; height: 20px; font-size: 0.75rem;">Δ</div>
-                    Delta Q
-                </div>
-                <div class="grid grid-cols-4 gap-2 mt-2">
-                    <div>
-                        <div class="label-text">W</div>
-                        <div id="xsens-deltaq-w" class="value-display" style="font-size: 0.875rem;">--</div>
-                    </div>
-                    <div>
-                        <div class="label-text">X</div>
-                        <div id="xsens-deltaq-x" class="value-display" style="font-size: 0.875rem;">--</div>
-                    </div>
-                    <div>
-                        <div class="label-text">Y</div>
-                        <div id="xsens-deltaq-y" class="value-display" style="font-size: 0.875rem;">--</div>
-                    </div>
-                    <div>
-                        <div class="label-text">Z</div>
-                        <div id="xsens-deltaq-z" class="value-display" style="font-size: 0.875rem;">--</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Velocity Components -->
-            <div class="glass-card gps">
-                <div class="section-title" style="font-size: 1rem;">
-                    <div class="section-icon" style="background: #3b82f6; width: 20px; height: 20px; font-size: 0.75rem;">→</div>
+                    <span class="section-icon amber"></span>
                     Velocity
                 </div>
-                <div class="grid grid-cols-3 gap-2 mt-2">
-                    <div>
-                        <div class="label-text">X</div>
-                        <div id="xsens-vel-x" class="value-display" style="font-size: 0.875rem;">--</div>
-                    </div>
-                    <div>
-                        <div class="label-text">Y</div>
-                        <div id="xsens-vel-y" class="value-display" style="font-size: 0.875rem;">--</div>
-                    </div>
-                    <div>
-                        <div class="label-text">Z</div>
-                        <div id="xsens-vel-z" class="value-display" style="font-size: 0.875rem;">--</div>
-                    </div>
+                <div class="chart-container">
+                    <canvas id="velocity-chart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <section class="parameter-grid">
+            <div class="glass-card">
+                <div class="section-title">
+                    <span class="section-icon purple"></span>
+                    Attitude
+                </div>
+                <div class="metric-grid four-cols">
+                    <div class="metric"><span>Q0</span><strong id="xsens-q0">--</strong></div>
+                    <div class="metric"><span>Q1</span><strong id="xsens-q1">--</strong></div>
+                    <div class="metric"><span>Q2</span><strong id="xsens-q2">--</strong></div>
+                    <div class="metric"><span>Q3</span><strong id="xsens-q3">--</strong></div>
+                    <div class="metric"><span>Roll</span><strong id="xsens-roll">--</strong></div>
+                    <div class="metric"><span>Pitch</span><strong id="xsens-pitch">--</strong></div>
+                    <div class="metric"><span>Yaw</span><strong id="xsens-yaw">--</strong></div>
+                    <div class="metric"><span>Delta Q0</span><strong id="xsens-dq0">--</strong></div>
+                    <div class="metric"><span>Delta Q1</span><strong id="xsens-dq1">--</strong></div>
+                    <div class="metric"><span>Delta Q2</span><strong id="xsens-dq2">--</strong></div>
+                    <div class="metric"><span>Delta Q3</span><strong id="xsens-dq3">--</strong></div>
                 </div>
             </div>
 
-            <!-- Status Summary -->
-            <div class="glass-card" style="border-left: 4px solid #06b6d4;">
-                <div class="section-title" style="font-size: 1rem;">
-                    <div class="section-icon" style="background: #06b6d4; width: 20px; height: 20px; font-size: 0.75rem;">✓</div>
-                    Status
+            <div class="glass-card">
+                <div class="section-title">
+                    <span class="section-icon green"></span>
+                    Motion
                 </div>
-                <div class="space-y-2 mt-2">
-                    <div class="flex justify-between items-center">
-                        <span class="label-text">GPS</span>
-                        <span id="gps-status" class="status-indicator status-fail"></span>
-                    </div>
-                    <div class="flex justify-between items-center">
-                        <span class="label-text">IMU</span>
-                        <span id="imu-status" class="status-indicator status-fail"></span>
-                    </div>
-                    <div class="flex justify-between items-center">
-                        <span class="label-text">Magnetometer</span>
-                        <span id="mag-status" class="status-indicator status-fail"></span>
-                    </div>
+                <div class="metric-grid three-cols">
+                    <div class="metric"><span>Acc X</span><strong id="xsens-acc-x">--</strong></div>
+                    <div class="metric"><span>Acc Y</span><strong id="xsens-acc-y">--</strong></div>
+                    <div class="metric"><span>Acc Z</span><strong id="xsens-acc-z">--</strong></div>
+                    <div class="metric"><span>Free X</span><strong id="xsens-free-acc-x">--</strong></div>
+                    <div class="metric"><span>Free Y</span><strong id="xsens-free-acc-y">--</strong></div>
+                    <div class="metric"><span>Free Z</span><strong id="xsens-free-acc-z">--</strong></div>
+                    <div class="metric"><span>HR Acc X</span><strong id="xsens-hr-acc-x">--</strong></div>
+                    <div class="metric"><span>HR Acc Y</span><strong id="xsens-hr-acc-y">--</strong></div>
+                    <div class="metric"><span>HR Acc Z</span><strong id="xsens-hr-acc-z">--</strong></div>
+                    <div class="metric"><span>Gyr X</span><strong id="xsens-gyr-x">--</strong></div>
+                    <div class="metric"><span>Gyr Y</span><strong id="xsens-gyr-y">--</strong></div>
+                    <div class="metric"><span>Gyr Z</span><strong id="xsens-gyr-z">--</strong></div>
+                    <div class="metric"><span>HR Gyr X</span><strong id="xsens-hr-gyr-x">--</strong></div>
+                    <div class="metric"><span>HR Gyr Y</span><strong id="xsens-hr-gyr-y">--</strong></div>
+                    <div class="metric"><span>HR Gyr Z</span><strong id="xsens-hr-gyr-z">--</strong></div>
+                    <div class="metric"><span>Delta V X</span><strong id="xsens-dv-x">--</strong></div>
+                    <div class="metric"><span>Delta V Y</span><strong id="xsens-dv-y">--</strong></div>
+                    <div class="metric"><span>Delta V Z</span><strong id="xsens-dv-z">--</strong></div>
                 </div>
             </div>
-        </div>
-    </div>
 
-        <!-- Footer -->
-        <div class="bg-white rounded-xl shadow-lg p-6 text-center text-gray-500">
-            <p class="mb-2">Last Update: <span id="last-update" class="font-mono">N/A</span></p>
-            <p class="text-sm">NTUR Racing Team - Xsens IMU Monitor v1.0</p>
-        </div>
-    </div>
+            <div class="glass-card">
+                <div class="section-title">
+                    <span class="section-icon cyan"></span>
+                    Navigation
+                </div>
+                <div class="metric-grid three-cols">
+                    <div class="metric"><span>Vel X</span><strong id="xsens-vel-x">--</strong></div>
+                    <div class="metric"><span>Vel Y</span><strong id="xsens-vel-y">--</strong></div>
+                    <div class="metric"><span>Vel Z</span><strong id="xsens-vel-z">--</strong></div>
+                    <div class="metric"><span>ECEF X</span><strong id="xsens-ecef-x">--</strong></div>
+                    <div class="metric"><span>ECEF Y</span><strong id="xsens-ecef-y">--</strong></div>
+                    <div class="metric"><span>ECEF Z</span><strong id="xsens-ecef-z">--</strong></div>
+                    <div class="metric"><span>Fix Type</span><strong id="xsens-fix-type">--</strong></div>
+                    <div class="metric"><span>Satellites</span><strong id="xsens-sats">--</strong></div>
+                    <div class="metric"><span>numSv</span><strong id="xsens-num-sv">--</strong></div>
+                    <div class="metric"><span>Valid</span><strong id="xsens-gnss-valid">--</strong></div>
+                    <div class="metric"><span>Flags</span><strong id="xsens-gnss-flags">--</strong></div>
+                    <div class="metric"><span>PDOP</span><strong id="xsens-pdop">--</strong></div>
+                    <div class="metric"><span>TDOP</span><strong id="xsens-tdop">--</strong></div>
+                    <div class="metric"><span>VDOP</span><strong id="xsens-vdop">--</strong></div>
+                    <div class="metric"><span>HDOP</span><strong id="xsens-hdop">--</strong></div>
+                </div>
+            </div>
+
+            <div class="glass-card">
+                <div class="section-title">
+                    <span class="section-icon amber"></span>
+                    Environment
+                </div>
+                <div class="metric-grid three-cols">
+                    <div class="metric"><span>Mag X</span><strong id="xsens-mag-x">--</strong></div>
+                    <div class="metric"><span>Mag Y</span><strong id="xsens-mag-y">--</strong></div>
+                    <div class="metric"><span>Mag Z</span><strong id="xsens-mag-z">--</strong></div>
+                    <div class="metric"><span>Temp</span><strong id="xsens-temp">--</strong></div>
+                    <div class="metric"><span>Pressure</span><strong id="xsens-pressure">--</strong></div>
+                    <div class="metric"><span>UTC</span><strong id="xsens-utc">--</strong></div>
+                </div>
+            </div>
+
+            <div class="glass-card wide-card">
+                <div class="section-title">
+                    <span class="section-icon red"></span>
+                    Device Status
+                </div>
+                <div class="flag-grid">
+                    <div><span>Self Test</span><strong id="xsens-self-test">--</strong></div>
+                    <div><span>Filter Valid</span><strong id="xsens-filter-valid">--</strong></div>
+                    <div><span>GNSS Fix</span><strong id="xsens-gnss-fix">--</strong></div>
+                    <div><span>No Rotation</span><strong id="xsens-no-rotation">--</strong></div>
+                    <div><span>External Clock</span><strong id="xsens-external-clock">--</strong></div>
+                    <div><span>Time Pulse</span><strong id="xsens-time-pulse">--</strong></div>
+                    <div><span>Clip Acc</span><strong id="xsens-clip-acc">--</strong></div>
+                    <div><span>Clip Gyr</span><strong id="xsens-clip-gyr">--</strong></div>
+                    <div><span>Clip Mag</span><strong id="xsens-clip-mag">--</strong></div>
+                    <div><span>Warning</span><strong id="xsens-warning">--</strong></div>
+                    <div><span>Sample Time</span><strong id="xsens-sample-time">--</strong></div>
+                    <div><span>Counter</span><strong id="xsens-counter">--</strong></div>
+                </div>
+            </div>
+        </section>
+    </main>
 </body>
 </html>

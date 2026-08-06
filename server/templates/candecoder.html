@@ -205,6 +205,47 @@
                     </div>
                 </div>
 
+                <div class="workspace-panel">
+                    <div class="workspace-heading">
+                        <span>Workspace</span>
+                        <div class="workspace-actions">
+                            <button id="refreshWorkspaceButton" class="secondary-action compact" type="button">Refresh</button>
+                            <strong id="workspaceTreeCount">0 items</strong>
+                        </div>
+                    </div>
+                    <div id="workspaceTree" class="workspace-tree-list">
+                        <div class="empty-state">No workspace files loaded</div>
+                    </div>
+                    <div id="workspaceEditor" class="workspace-editor hidden">
+                        <div class="workspace-selection-line">
+                            <span>Selected</span>
+                            <code id="workspaceSelectedPath">-</code>
+                        </div>
+
+                        <label class="field workspace-move-field">
+                            <span>Move / Rename To</span>
+                            <input id="workspaceMoveInput" type="text" autocomplete="off" placeholder="decoded_run/file.csv or /mnt/webdev">
+                        </label>
+
+                        <div class="workspace-editor-actions">
+                            <button id="loadWorkspaceFileButton" class="secondary-action compact" type="button" disabled>Load File</button>
+                            <button id="moveWorkspaceButton" class="secondary-action compact" type="button" disabled>Move</button>
+                        </div>
+
+                        <label id="workspaceContentField" class="field workspace-content-field hidden">
+                            <span>File Content</span>
+                            <textarea id="workspaceFileContent" spellcheck="false"></textarea>
+                        </label>
+
+                        <div class="workspace-editor-actions">
+                            <strong id="workspaceFileMeta">-</strong>
+                            <button id="saveWorkspaceFileButton" class="secondary-action compact accent" type="button" disabled>Save File</button>
+                        </div>
+
+                        <div id="workspaceMessage" class="workspace-message hidden"></div>
+                    </div>
+                </div>
+
                 <div id="errorBox" class="error-box hidden"></div>
 
                 <div class="event-log" id="eventLog"></div>

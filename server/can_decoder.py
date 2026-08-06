@@ -9,8 +9,11 @@ import struct
 import logging
 import cantools
 from datetime import datetime
+from pathlib import Path
 
-DBC_FILE = "dbc/NTUR_EP6_260617.dbc"
+SERVER_DIR = Path(__file__).resolve().parent
+DBC_FILE = SERVER_DIR / "dbc" / "NTUR_EP6_260617.dbc"
+XSENS_DBC_FILE = SERVER_DIR / "dbc" / "Xsens_MTi_600_series.dbc"
 
 # CAN ID : (subsystem, handler_function_name, param_type)
 # param_type: "raw" (data), "decoded" (decoded), "both" (data + decoded)
@@ -99,15 +102,27 @@ class CANDecoder:
     def __init__(self):
         # Data storage 
         self.data_store = self.create_empty_data_store()
+        self.db = None
+        self.xsens_db = None
+        self.dbc_supported_can_id = set()
+        self.xsens_supported_can_id = set()
 
         # load dbc file
         try:
-            self.db = cantools.database.load_file(DBC_FILE)
+            self.db = cantools.database.load_file(str(DBC_FILE), strict=False)
             self.dbc_supported_can_id = set(msg.frame_id for msg in self.db.messages)
             print(f"Loaded DBC file: {DBC_FILE}")
             print(f"Messages count: {len(self.db.messages)}")
         except Exception as e:
             print(f"Error loading DBC file: {e}")
+
+        try:
+            self.xsens_db = cantools.database.load_file(str(XSENS_DBC_FILE), strict=False)
+            self.xsens_supported_can_id = set(msg.frame_id for msg in self.xsens_db.messages)
+            print(f"Loaded Xsens DBC file: {XSENS_DBC_FILE}")
+            print(f"Xsens messages count: {len(self.xsens_db.messages)}")
+        except Exception as e:
+            print(f"Error loading Xsens DBC file: {e}")
 
     def create_empty_data_store(self):
         return {
@@ -170,6 +185,46 @@ class CANDecoder:
                 'quaternion': {'w': None, 'x': None, 'y': None, 'z': None},
                 'last_update': None
             },
+            'xsens': {
+                'sample_time': {'timestamp_us': None},
+                'group_counter': {'counter': None},
+                'status_word': {
+                    'self_test_ok': None, 'filter_valid': None, 'gnss_fix': None,
+                    'no_rotation_status': None, 'representative_motion': None,
+                    'external_clock_synced': None, 'clipping_detected': None,
+                    'sync_in': None, 'sync_out': None, 'filter_mode': None,
+                    'have_gnss_time_pulse': None, 'rtk_status': None,
+                    'clip_acc_x': None, 'clip_acc_y': None, 'clip_acc_z': None,
+                    'clip_gyr_x': None, 'clip_gyr_y': None, 'clip_gyr_z': None,
+                    'clip_mag_x': None, 'clip_mag_y': None, 'clip_mag_z': None,
+                },
+                'quaternion': {'q0': None, 'q1': None, 'q2': None, 'q3': None},
+                'euler': {'roll': None, 'pitch': None, 'yaw': None},
+                'delta_v': {'x': None, 'y': None, 'z': None, 'exponent': None},
+                'rate_of_turn': {'gyr_x': None, 'gyr_y': None, 'gyr_z': None},
+                'delta_q': {'dq0': None, 'dq1': None, 'dq2': None, 'dq3': None},
+                'acceleration': {'acc_x': None, 'acc_y': None, 'acc_z': None},
+                'free_acceleration': {'x': None, 'y': None, 'z': None},
+                'rate_of_turn_hr': {'gyr_x': None, 'gyr_y': None, 'gyr_z': None},
+                'acceleration_hr': {'acc_x': None, 'acc_y': None, 'acc_z': None},
+                'magnetic_field': {'mag_x': None, 'mag_y': None, 'mag_z': None},
+                'temperature': {'temperature': None},
+                'barometric_pressure': {'pressure': None},
+                'utc': {
+                    'year': None, 'month': None, 'day': None, 'hour': None,
+                    'minute': None, 'second': None, 'tenth_ms': None,
+                },
+                'gps': {'lat': None, 'lon': None, 'alt': None},
+                'position_ecef': {'x': None, 'y': None, 'z': None},
+                'velocity': {'vel_x': None, 'vel_y': None, 'vel_z': None, 'speed_kmh': None},
+                'gnss_status': {
+                    'fix_type': None, 'num_sv': None, 'flags': None,
+                    'valid': None, 'num_svs': None,
+                },
+                'gnss_dop': {'pdop': None, 'tdop': None, 'vdop': None, 'hdop': None},
+                'warning': {'warning_code': None},
+                'last_update': None,
+            },
             'distance': {
                 'trip_distance_km': None,
                 'last_update': None
@@ -203,6 +258,7 @@ class CANDecoder:
             'vcu': self.data_store['vcu'],
             'imu': self.data_store['imu'],
             'imu2': self.data_store['imu2'],
+            'xsens': self.data_store['xsens'],
             'message_count': message_count,
             'update_time': datetime.now().isoformat(),
             'vehicle_clients': len(vehicle_clients),
@@ -215,6 +271,9 @@ class CANDecoder:
     def decode_can_message(self, msg):
         can_id = msg.arbitration_id
         data = msg.data
+
+        if self.decode_xsens_message(can_id, data):
+            return
 
         if can_id not in CAN_MESSAGE_CONFIG:
             return
@@ -267,6 +326,153 @@ class CANDecoder:
         
         except Exception as e:
             print(f"Failed to decode CAN message ID 0x{can_id:03X}: {e}")
+
+    def decode_xsens_message(self, can_id, data):
+        if self.xsens_db is None or can_id not in self.xsens_supported_can_id:
+            return False
+
+        message = self.xsens_db.get_message_by_frame_id(can_id)
+        if len(data) < message.length:
+            return True
+
+        try:
+            decoded = message.decode(data, decode_choices=False)
+        except Exception as e:
+            print(f"Xsens DBC decoding error for CAN ID 0x{can_id:03X}: {e}")
+            return True
+
+        try:
+            self.apply_xsens_decoded_message(message.name, decoded)
+            self.data_store['xsens']['last_update'] = time.time()
+        except Exception as e:
+            print(f"Failed to apply Xsens message ID 0x{can_id:03X}: {e}")
+        return True
+
+    def _set_xsens_values(self, section_name, decoded, mapping):
+        section = self.data_store['xsens'][section_name]
+        for target_key, signal_name in mapping.items():
+            section[target_key] = decoded.get(signal_name)
+
+    def _to_bool_or_none(self, value):
+        if value is None:
+            return None
+        return bool(value)
+
+    def apply_xsens_decoded_message(self, message_name, decoded):
+        xsens = self.data_store['xsens']
+
+        if message_name == 'Warning':
+            xsens['warning']['warning_code'] = decoded.get('WarningCode')
+        elif message_name == 'SampleTime':
+            xsens['sample_time']['timestamp_us'] = decoded.get('Timestamp')
+        elif message_name == 'GroupCounter':
+            xsens['group_counter']['counter'] = decoded.get('Counter')
+        elif message_name == 'StatusWord':
+            bool_signals = {
+                'self_test_ok': 'SelfTestOk',
+                'filter_valid': 'FilterValid',
+                'gnss_fix': 'GnssFix',
+                'representative_motion': 'RepresentativeMotion',
+                'external_clock_synced': 'ExternalClockSynced',
+                'clipping_detected': 'ClippingDetected',
+                'sync_in': 'SyncIn',
+                'sync_out': 'SyncOut',
+                'have_gnss_time_pulse': 'HaveGnssTimePulse',
+                'clip_acc_x': 'ClipAccX',
+                'clip_acc_y': 'ClipAccY',
+                'clip_acc_z': 'ClipAccZ',
+                'clip_gyr_x': 'ClipGyrX',
+                'clip_gyr_y': 'ClipGyrY',
+                'clip_gyr_z': 'ClipGyrZ',
+                'clip_mag_x': 'ClipMagX',
+                'clip_mag_y': 'ClipMagY',
+                'clip_mag_z': 'ClipMagZ',
+            }
+            status = xsens['status_word']
+            for target_key, signal_name in bool_signals.items():
+                status[target_key] = self._to_bool_or_none(decoded.get(signal_name))
+            status['no_rotation_status'] = decoded.get('NoRotationStatus')
+            status['filter_mode'] = decoded.get('FilterMode')
+            status['rtk_status'] = decoded.get('RtkStatus')
+        elif message_name == 'Quaternion':
+            self._set_xsens_values('quaternion', decoded, {
+                'q0': 'Q0', 'q1': 'Q1', 'q2': 'Q2', 'q3': 'Q3',
+            })
+        elif message_name == 'EulerAngles':
+            self._set_xsens_values('euler', decoded, {
+                'roll': 'roll', 'pitch': 'pitch', 'yaw': 'yaw',
+            })
+        elif message_name == 'DeltaV':
+            self._set_xsens_values('delta_v', decoded, {
+                'x': 'X', 'y': 'Y', 'z': 'Z', 'exponent': 'Exponent',
+            })
+        elif message_name == 'RateOfTurn':
+            self._set_xsens_values('rate_of_turn', decoded, {
+                'gyr_x': 'gyrX', 'gyr_y': 'gyrY', 'gyr_z': 'gyrZ',
+            })
+        elif message_name == 'DeltaQ':
+            self._set_xsens_values('delta_q', decoded, {
+                'dq0': 'DeltaQ0', 'dq1': 'DeltaQ1', 'dq2': 'DeltaQ2', 'dq3': 'DeltaQ3',
+            })
+        elif message_name == 'Acceleration':
+            self._set_xsens_values('acceleration', decoded, {
+                'acc_x': 'accX', 'acc_y': 'accY', 'acc_z': 'accZ',
+            })
+        elif message_name == 'FreeAcceleration':
+            self._set_xsens_values('free_acceleration', decoded, {
+                'x': 'FreeAccX', 'y': 'FreeAccY', 'z': 'FreeAccZ',
+            })
+        elif message_name == 'RateOfTurnHR':
+            self._set_xsens_values('rate_of_turn_hr', decoded, {
+                'gyr_x': 'HrGyrX', 'gyr_y': 'HrGyrY', 'gyr_z': 'HrGyrZ',
+            })
+        elif message_name == 'AccelerationHR':
+            self._set_xsens_values('acceleration_hr', decoded, {
+                'acc_x': 'HrAccX', 'acc_y': 'HrAccY', 'acc_z': 'HrAccZ',
+            })
+        elif message_name == 'MagneticField':
+            self._set_xsens_values('magnetic_field', decoded, {
+                'mag_x': 'magX', 'mag_y': 'magY', 'mag_z': 'magZ',
+            })
+        elif message_name == 'Temperature':
+            xsens['temperature']['temperature'] = decoded.get('Temperature')
+        elif message_name == 'BarometricPressure':
+            xsens['barometric_pressure']['pressure'] = decoded.get('Pressure')
+        elif message_name == 'UTC':
+            self._set_xsens_values('utc', decoded, {
+                'year': 'year', 'month': 'month', 'day': 'day',
+                'hour': 'hour', 'minute': 'minute', 'second': 'second',
+                'tenth_ms': 'tenthms',
+            })
+        elif message_name == 'LatLon':
+            self._set_xsens_values('gps', decoded, {
+                'lat': 'latitude', 'lon': 'longitude',
+            })
+        elif message_name == 'AltitudeEllipsoid':
+            xsens['gps']['alt'] = decoded.get('altEllipsoid')
+        elif message_name == 'PositionEcef_X':
+            xsens['position_ecef']['x'] = decoded.get('PositionEcef_X')
+        elif message_name == 'PositionEcef_Y':
+            xsens['position_ecef']['y'] = decoded.get('PositionEcef_Y')
+        elif message_name == 'PositionEcef_Z':
+            xsens['position_ecef']['z'] = decoded.get('PositionEcef_Z')
+        elif message_name == 'Velocity':
+            self._set_xsens_values('velocity', decoded, {
+                'vel_x': 'velX', 'vel_y': 'velY', 'vel_z': 'velZ',
+            })
+            vel_x = xsens['velocity']['vel_x']
+            vel_y = xsens['velocity']['vel_y']
+            if vel_x is not None and vel_y is not None:
+                xsens['velocity']['speed_kmh'] = ((vel_x ** 2 + vel_y ** 2) ** 0.5) * 3.6
+        elif message_name == 'GnssReceiverStatus':
+            self._set_xsens_values('gnss_status', decoded, {
+                'fix_type': 'fixType', 'num_sv': 'numSv', 'flags': 'flags',
+                'valid': 'valid', 'num_svs': 'numSvs',
+            })
+        elif message_name == 'GnssReceiverDop':
+            self._set_xsens_values('gnss_dop', decoded, {
+                'pdop': 'pdop', 'tdop': 'tdop', 'vdop': 'vdop', 'hdop': 'hdop',
+            })
 
     # decode functions
     def decode_timestamp(self, decoded):
