@@ -83,41 +83,13 @@ function animate3D() {
 
 function updateVehicleOrientation(roll, pitch, yaw) {
     if (vehicleMesh) {
-        // Convert degrees to radians
-        vehicleMesh.rotation.x = pitch * Math.PI / 180;
-        vehicleMesh.rotation.y = yaw * Math.PI / 180;
-        vehicleMesh.rotation.z = roll * Math.PI / 180;
-    }
-}
-
-function updateVehicleOrientationQuaternion(w, x, y, z) {
-    if (vehicleMesh && w !== null && x !== null && y !== null && z !== null) {
-        // Create THREE.js quaternion from IMU2 quaternion data
-        // Note: THREE.Quaternion constructor is (x, y, z, w)
-        // Try different axis mappings to match IMU coordinate system
-        
-        // Option 1: Direct mapping (if IMU and Three.js use same coordinate system)
-        // const quaternion = new THREE.Quaternion(x, y, z, w);
-        
-        // Option 2: Inverse/conjugate (flip rotation direction)
-        // const quaternion = new THREE.Quaternion(-x, -y, -z, w);
-        
-        // Option 3: Swap axes (common when IMU Z-up vs Three.js Y-up)
-        // Try: IMU(x,y,z) -> Three.js(x,z,-y) for Z-up to Y-up conversion
-        const quaternion = new THREE.Quaternion(x, z, -y, w);
-        
-        // Apply quaternion to vehicle mesh
-        vehicleMesh.setRotationFromQuaternion(quaternion);
-        
-        // Also update euler angles display for reference
-        const euler = new THREE.Euler().setFromQuaternion(quaternion, 'XYZ');
-        const rollDeg = euler.z * 180 / Math.PI;
-        const pitchDeg = euler.x * 180 / Math.PI;
-        const yawDeg = euler.y * 180 / Math.PI;
-        
-        document.getElementById('euler-roll').textContent = formatValue(rollDeg, 2) + '°';
-        document.getElementById('euler-pitch').textContent = formatValue(pitchDeg, 2) + '°';
-        document.getElementById('euler-yaw').textContent = formatValue(yawDeg, 2) + '°';
+        const toRadians = Math.PI / 180;
+        vehicleMesh.rotation.set(
+            (pitch || 0) * toRadians,
+            (yaw || 0) * toRadians,
+            (roll || 0) * toRadians,
+            'XYZ'
+        );
     }
 }
 
@@ -370,88 +342,67 @@ function updateSuspension(fl, fr, rl, rr) {
     }
 }
 
-function updateIMU1(imu) {
-    if (!imu) return;
+function updateEulerFromXsens(euler) {
+    if (!euler) return;
 
-    // Acceleration KM6
-    if (imu.accel_km6) {
-        document.getElementById('imu1-accel-km6-x').textContent = formatValue(imu.accel_km6.x);
-        document.getElementById('imu1-accel-km6-y').textContent = formatValue(imu.accel_km6.y);
-        document.getElementById('imu1-accel-km6-z').textContent = formatValue(imu.accel_km6.z);
-    }
+    document.getElementById('euler-roll').textContent = formatValue(euler.roll, 2) + '°';
+    document.getElementById('euler-pitch').textContent = formatValue(euler.pitch, 2) + '°';
+    document.getElementById('euler-yaw').textContent = formatValue(euler.yaw, 2) + '°';
 
-    // Acceleration KM308
-    if (imu.accel_km308) {
-        document.getElementById('imu1-accel-km308-x').textContent = formatValue(imu.accel_km308.x);
-        document.getElementById('imu1-accel-km308-y').textContent = formatValue(imu.accel_km308.y);
-        document.getElementById('imu1-accel-km308-z').textContent = formatValue(imu.accel_km308.z);
-        
-        // Update acceleration chart
-        updateChart(accelChart, imu.accel_km308.x, imu.accel_km308.y, imu.accel_km308.z);
-        updateLiveGForce(imu.accel_km308.y, imu.accel_km308.x); // Lateral G = Y, Longitudinal G = X
-    }
-
-    // Gyroscope
-    if (imu.gyro) {
-        document.getElementById('imu1-gyro-x').textContent = formatValue(imu.gyro.x, 1);
-        document.getElementById('imu1-gyro-y').textContent = formatValue(imu.gyro.y, 1);
-        document.getElementById('imu1-gyro-z').textContent = formatValue(imu.gyro.z, 1);
-        
-        // Update gyroscope chart
-        updateChart(gyroChart, imu.gyro.x, imu.gyro.y, imu.gyro.z);
-    }
-
-    // Euler Angles (for reference only, 3D now driven by IMU2 quaternion)
-    if (imu.euler) {
-        // Display values but don't use for 3D rotation (IMU2 quaternion is used instead)
-        // document.getElementById('euler-roll').textContent = formatValue(imu.euler.roll, 2) + '°';
-        // document.getElementById('euler-pitch').textContent = formatValue(imu.euler.pitch, 2) + '°';
-        // document.getElementById('euler-yaw').textContent = formatValue(imu.euler.yaw, 2) + '°';
-        
-        // 3D vehicle orientation now controlled by IMU2 quaternion
-        // updateVehicleOrientation(imu.euler.roll, imu.euler.pitch, imu.euler.yaw);
-    }
-
-    // Magnetometer
-    if (imu.mag) {
-        document.getElementById('imu1-mag-x').textContent = formatValue(imu.mag.x, 1);
-        document.getElementById('imu1-mag-y').textContent = formatValue(imu.mag.y, 1);
-        document.getElementById('imu1-mag-z').textContent = formatValue(imu.mag.z, 1);
+    if (typeof euler.roll === 'number' && typeof euler.pitch === 'number' && typeof euler.yaw === 'number') {
+        updateVehicleOrientation(euler.roll, euler.pitch, euler.yaw);
     }
 }
 
-function updateIMU2(imu2) {
-    if (!imu2) return;
+function updateXsensMotion(xsens) {
+    if (!xsens) return;
 
-    // Acceleration
-    if (imu2.accel) {
-        document.getElementById('imu2-accel-x').textContent = formatValue(imu2.accel.x);
-        document.getElementById('imu2-accel-y').textContent = formatValue(imu2.accel.y);
-        document.getElementById('imu2-accel-z').textContent = formatValue(imu2.accel.z);
-    }
+    const acceleration = xsens.acceleration || {};
+    const freeAcceleration = xsens.free_acceleration || {};
+    const rateOfTurn = xsens.rate_of_turn || {};
+    const magnetic = xsens.magnetic_field || {};
 
-    // Gyroscope
-    if (imu2.gyro) {
-        document.getElementById('imu2-gyro-x').textContent = formatValue(imu2.gyro.x, 1);
-        document.getElementById('imu2-gyro-y').textContent = formatValue(imu2.gyro.y, 1);
-        document.getElementById('imu2-gyro-z').textContent = formatValue(imu2.gyro.z, 1);
-    }
+    document.getElementById('imu1-accel-km6-x').textContent = formatValue(acceleration.acc_x);
+    document.getElementById('imu1-accel-km6-y').textContent = formatValue(acceleration.acc_y);
+    document.getElementById('imu1-accel-km6-z').textContent = formatValue(acceleration.acc_z);
 
-    // Quaternion
-    if (imu2.quaternion) {
-        document.getElementById('imu2-quat-w').textContent = formatValue(imu2.quaternion.w, 4);
-        document.getElementById('imu2-quat-x').textContent = formatValue(imu2.quaternion.x, 4);
-        document.getElementById('imu2-quat-y').textContent = formatValue(imu2.quaternion.y, 4);
-        document.getElementById('imu2-quat-z').textContent = formatValue(imu2.quaternion.z, 4);
-        
-        // Update 3D vehicle orientation using quaternion
-        updateVehicleOrientationQuaternion(
-            imu2.quaternion.w, 
-            imu2.quaternion.x, 
-            imu2.quaternion.y, 
-            imu2.quaternion.z
-        );
-    }
+    document.getElementById('imu1-accel-km308-x').textContent = formatValue(freeAcceleration.x);
+    document.getElementById('imu1-accel-km308-y').textContent = formatValue(freeAcceleration.y);
+    document.getElementById('imu1-accel-km308-z').textContent = formatValue(freeAcceleration.z);
+
+    document.getElementById('imu1-gyro-x').textContent = formatValue(rateOfTurn.gyr_x, 3);
+    document.getElementById('imu1-gyro-y').textContent = formatValue(rateOfTurn.gyr_y, 3);
+    document.getElementById('imu1-gyro-z').textContent = formatValue(rateOfTurn.gyr_z, 3);
+
+    document.getElementById('imu1-mag-x').textContent = formatValue(magnetic.mag_x, 5);
+    document.getElementById('imu1-mag-y').textContent = formatValue(magnetic.mag_y, 5);
+    document.getElementById('imu1-mag-z').textContent = formatValue(magnetic.mag_z, 5);
+
+    updateChart(accelChart, acceleration.acc_x, acceleration.acc_y, acceleration.acc_z);
+    updateChart(gyroChart, rateOfTurn.gyr_x, rateOfTurn.gyr_y, rateOfTurn.gyr_z);
+
+    const metersPerSecondSquaredPerG = 9.80665;
+    updateLiveGForce(
+        (freeAcceleration.y || 0) / metersPerSecondSquaredPerG,
+        (freeAcceleration.x || 0) / metersPerSecondSquaredPerG
+    );
+
+    updateEulerFromXsens(xsens.euler);
+}
+
+function updateXsensHighRate(xsens) {
+    if (!xsens) return;
+
+    const accelerationHr = xsens.acceleration_hr || {};
+    const rateOfTurnHr = xsens.rate_of_turn_hr || {};
+
+    document.getElementById('imu2-accel-x').textContent = formatValue(accelerationHr.acc_x);
+    document.getElementById('imu2-accel-y').textContent = formatValue(accelerationHr.acc_y);
+    document.getElementById('imu2-accel-z').textContent = formatValue(accelerationHr.acc_z);
+
+    document.getElementById('imu2-gyro-x').textContent = formatValue(rateOfTurnHr.gyr_x, 3);
+    document.getElementById('imu2-gyro-y').textContent = formatValue(rateOfTurnHr.gyr_y, 3);
+    document.getElementById('imu2-gyro-z').textContent = formatValue(rateOfTurnHr.gyr_z, 3);
 }
 
 // WebSocket Message Handler
@@ -479,13 +430,10 @@ ws.onmessage = function(event) {
     //     document.getElementById('last-update').textContent = time.toLocaleTimeString();
     // }
 
-    // Update IMU data
-    if (data.imu) {
-        updateIMU1(data.imu);
-    }
-
-    if (data.imu2) {
-        updateIMU2(data.imu2);
+    // Update XSens data
+    if (data.xsens) {
+        updateXsensMotion(data.xsens);
+        updateXsensHighRate(data.xsens);
     }
 
     // Update VCU data
