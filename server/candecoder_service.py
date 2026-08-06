@@ -41,7 +41,6 @@ CACHE_DIR = WORKSPACE_DIR / ".raw_cache"
 STATE_FILE = WORKSPACE_DIR / "sync_state.json"
 DEFAULT_PATTERN = "*.csv"
 CHUNK_SIZE = 256 * 1024
-WORKSPACE_EDIT_MAX_BYTES = 5 * 1024 * 1024
 DEFAULT_EXTERNAL_MOVE_ROOTS = ("/mnt/webdav",)
 EXTERNAL_MOVE_ROOTS_ENV = "CANDECODER_EXTERNAL_MOVE_ROOTS"
 DEFAULT_REMOTE_LOG_DIR = "/home/nturt/Desktop/RPI_Desktop/LOGS"
@@ -1051,61 +1050,46 @@ class CANDecoderSyncService:
             return path, False
         return self._workspace_path(raw), True
 
+    def _destination_relative_parts(self, destination: Path, in_workspace: bool) -> tuple[str, ...]:
+        resolved = destination.resolve(strict=False)
+        if in_workspace:
+            try:
+                return resolved.relative_to(self._workspace_root()).parts
+            except ValueError:
+                return ()
+
+        for root in self._external_move_roots():
+            try:
+                return resolved.relative_to(root).parts
+            except ValueError:
+                continue
+        return ()
+
+    def _aligned_directory_source(
+        self,
+        source: Path,
+        destination: Path,
+        destination_in_workspace: bool,
+    ) -> Path:
+        if not source.is_dir():
+            return source
+
+        destination_parts = self._destination_relative_parts(destination, destination_in_workspace)
+        candidates: list[Path] = []
+        for index, part in enumerate(destination_parts):
+            if part != source.name:
+                continue
+            candidate = source.joinpath(*destination_parts[index + 1:])
+            if candidate.exists() and candidate.is_dir() and not candidate.is_symlink():
+                candidates.append(candidate)
+
+        if not candidates:
+            return source
+        return max(candidates, key=lambda path: len(path.relative_to(source).parts))
+
     def _ensure_workspace_mutation_allowed(self) -> None:
         if self.current_task and not self.current_task.done():
-            raise RuntimeError("Wait for the current CAN decoder task to finish before editing, copying, or moving workspace files.")
-
-    def read_workspace_file(self, relative_path: str | None) -> dict[str, Any]:
-        path = self._workspace_path(relative_path)
-        if not path.exists():
-            raise RuntimeError("Workspace file does not exist.")
-        if not path.is_file() or path.is_symlink():
-            raise RuntimeError("Only regular workspace files can be edited.")
-
-        stats = path.stat()
-        if stats.st_size > WORKSPACE_EDIT_MAX_BYTES:
-            raise RuntimeError(f"File is too large to edit in the browser: {format_bytes(stats.st_size)}")
-
-        raw = path.read_bytes()
-        if b"\x00" in raw[:4096]:
-            raise RuntimeError("Binary files cannot be edited in the browser.")
-        try:
-            content = raw.decode("utf-8")
-        except UnicodeDecodeError as exc:
-            raise RuntimeError("Workspace file is not valid UTF-8 text.") from exc
-
-        return {
-            "relative_path": self._workspace_relative(path),
-            "name": path.name,
-            "size": stats.st_size,
-            "modified": datetime.fromtimestamp(stats.st_mtime).isoformat(timespec="seconds"),
-            "encoding": "utf-8",
-            "content": content,
-        }
-
-    def save_workspace_file(self, relative_path: str | None, content: str | None) -> dict[str, Any]:
-        self._ensure_workspace_mutation_allowed()
-        path = self._workspace_path(relative_path)
-        if not path.exists():
-            raise RuntimeError("Workspace file does not exist.")
-        if not path.is_file() or path.is_symlink():
-            raise RuntimeError("Only regular workspace files can be saved.")
-
-        text = "" if content is None else str(content)
-        raw = text.encode("utf-8")
-        if len(raw) > WORKSPACE_EDIT_MAX_BYTES:
-            raise RuntimeError(f"Edited content is too large to save: {format_bytes(len(raw))}")
-
-        path.write_text(text, encoding="utf-8", newline="")
-        stats = path.stat()
-        return {
-            "saved": True,
-            "relative_path": self._workspace_relative(path),
-            "name": path.name,
-            "size": stats.st_size,
-            "modified": datetime.fromtimestamp(stats.st_mtime).isoformat(timespec="seconds"),
-            "encoding": "utf-8",
-        }
+            raise RuntimeError("Wait for the current CAN decoder task to finish before copying, moving, or deleting workspace files.")
 
     def _prepare_workspace_transfer(
         self,
@@ -1125,24 +1109,31 @@ class CANDecoderSyncService:
             raise RuntimeError("Source workspace item does not exist.")
         if source.is_symlink():
             raise RuntimeError(f"Symlinks cannot be {action_name} from the browser.")
-        if not destination_in_workspace and destination.resolve(strict=False) in self._external_move_roots():
+        if source.is_file() and not destination_in_workspace and destination.resolve(strict=False) in self._external_move_roots():
             destination = destination / source.name
-        elif destination.exists() and destination.is_dir():
+        elif source.is_file() and destination.exists() and destination.is_dir():
             destination = destination / source.name
-        elif destination_raw.endswith(("/", "\\")):
+        elif source.is_file() and destination_raw.endswith(("/", "\\")):
             destination = destination / source.name
         destination_resolved = destination.resolve(strict=False)
-        if destination.exists():
+        if source.is_file() and destination.exists():
             raise RuntimeError("Destination already exists. Choose a new path.")
+        if source.is_dir() and destination.exists() and not destination.is_dir():
+            raise RuntimeError("Folder contents can only be moved into a folder destination.")
         if destination_resolved == root:
             raise RuntimeError("Destination must include a file or folder name.")
+        source = self._aligned_directory_source(source, destination, destination_in_workspace)
+        source_resolved = source.resolve(strict=False)
         try:
             destination_resolved.relative_to(source_resolved)
             raise RuntimeError(f"A folder cannot be {action_name} into itself.")
         except ValueError:
             pass
 
-        destination.parent.mkdir(parents=True, exist_ok=True)
+        if source.is_dir():
+            destination.mkdir(parents=True, exist_ok=True)
+        else:
+            destination.parent.mkdir(parents=True, exist_ok=True)
         return source, destination, destination_in_workspace
 
     def _prepare_workspace_copy(
@@ -1178,6 +1169,8 @@ class CANDecoderSyncService:
             destination.parent.mkdir(parents=True, exist_ok=True)
             return source, destination, destination_in_workspace
 
+        source = self._aligned_directory_source(source, destination, destination_in_workspace)
+        source_resolved = source.resolve(strict=False)
         destination_resolved = destination.resolve(strict=False)
         if destination.exists() and not destination.is_dir():
             raise RuntimeError("Folder contents can only be copied into a folder destination.")
@@ -1226,6 +1219,37 @@ class CANDecoderSyncService:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(item, target)
 
+    def _move_directory_contents(self, source: Path, destination: Path) -> None:
+        conflicts: list[str] = []
+        symlinks: list[str] = []
+        for item in source.rglob("*"):
+            relative = item.relative_to(source)
+            target = destination / relative
+            if item.is_symlink():
+                symlinks.append(relative.as_posix())
+                continue
+            if item.is_dir():
+                if target.exists() and not target.is_dir():
+                    conflicts.append(relative.as_posix())
+                continue
+            if target.exists():
+                conflicts.append(relative.as_posix())
+
+        if symlinks:
+            preview = ", ".join(symlinks[:5])
+            suffix = "..." if len(symlinks) > 5 else ""
+            raise RuntimeError(f"Folder contains symlink(s) that cannot be moved from the browser: {preview}{suffix}")
+        if conflicts:
+            preview = ", ".join(conflicts[:5])
+            suffix = "..." if len(conflicts) > 5 else ""
+            raise RuntimeError(f"Destination already contains matching item(s): {preview}{suffix}")
+
+        destination.mkdir(parents=True, exist_ok=True)
+        for item in sorted(source.iterdir(), key=lambda child: child.name.lower()):
+            target = destination / item.name
+            shutil.move(str(item), str(target))
+        source.rmdir()
+
     def move_workspace_item(
         self,
         source_relative_path: str | None,
@@ -1237,7 +1261,10 @@ class CANDecoderSyncService:
             destination_relative_path,
             "moved",
         )
-        shutil.move(str(source), str(destination))
+        if source.is_dir():
+            self._move_directory_contents(source, destination)
+        else:
+            shutil.move(str(source), str(destination))
         moved_path = destination
         item_type = "directory" if moved_path.is_dir() else "file"
         destination_relative = self._workspace_relative(moved_path) if destination_in_workspace else ""
@@ -1274,6 +1301,33 @@ class CANDecoderSyncService:
             "destination_relative_path": destination_relative,
             "destination_path": str(copied_path),
             "in_workspace": destination_in_workspace,
+            "type": item_type,
+            "workspace": self.workspace_tree(),
+        }
+
+    def delete_workspace_item(self, relative_path: str | None) -> dict[str, Any]:
+        self._ensure_workspace_mutation_allowed()
+        path = self._workspace_path(relative_path)
+        root = self._workspace_root()
+        resolved = path.resolve(strict=False)
+
+        if resolved == root:
+            raise RuntimeError("The workspace root cannot be deleted.")
+        if not path.exists():
+            raise RuntimeError("Workspace item does not exist.")
+        if path.is_symlink():
+            raise RuntimeError("Symlinks cannot be deleted from the browser.")
+
+        item_type = "directory" if path.is_dir() else "file"
+        deleted_relative = self._workspace_relative(path)
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+
+        return {
+            "deleted": True,
+            "relative_path": deleted_relative,
             "type": item_type,
             "workspace": self.workspace_tree(),
         }

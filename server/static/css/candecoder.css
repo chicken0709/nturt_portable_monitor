@@ -815,30 +815,6 @@
     margin-top: 10px;
 }
 
-.workspace-content-field {
-    margin-top: 10px;
-}
-
-.workspace-content-field textarea {
-    width: 100%;
-    min-height: 180px;
-    resize: vertical;
-    border: 1px solid rgb(63 63 70);
-    border-radius: 7px;
-    outline: none;
-    background: rgb(9 9 11);
-    color: rgb(244 244 245);
-    padding: 9px 10px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-    font-size: 12px;
-    line-height: 1.45;
-}
-
-.workspace-content-field textarea:focus {
-    border-color: rgb(14 165 233);
-    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.18);
-}
-
 .workspace-editor-actions {
     display: flex;
     min-width: 0;
@@ -847,16 +823,6 @@
     justify-content: space-between;
     gap: 8px;
     margin-top: 8px;
-}
-
-.workspace-editor-actions strong {
-    min-width: 0;
-    overflow: hidden;
-    color: rgb(113 113 122);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-    font-size: 11px;
 }
 
 .workspace-message {

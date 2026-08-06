@@ -223,23 +223,14 @@
                         </div>
 
                         <label class="field workspace-move-field">
-                            <span>Copy To</span>
+                            <span>Copy / Move To</span>
                             <input id="workspaceMoveInput" type="text" autocomplete="off" placeholder="/mnt/webdav/vehical_data_EP7/">
                         </label>
 
                         <div class="workspace-editor-actions">
-                            <button id="loadWorkspaceFileButton" class="secondary-action compact" type="button" disabled>Load File</button>
-                            <button id="moveWorkspaceButton" class="secondary-action compact" type="button" disabled>Copy</button>
-                        </div>
-
-                        <label id="workspaceContentField" class="field workspace-content-field hidden">
-                            <span>File Content</span>
-                            <textarea id="workspaceFileContent" spellcheck="false"></textarea>
-                        </label>
-
-                        <div class="workspace-editor-actions">
-                            <strong id="workspaceFileMeta">-</strong>
-                            <button id="saveWorkspaceFileButton" class="secondary-action compact accent" type="button" disabled>Save File</button>
+                            <button id="copyWorkspaceButton" class="secondary-action compact" type="button" disabled>Copy</button>
+                            <button id="moveWorkspaceButton" class="secondary-action compact" type="button" disabled>Move</button>
+                            <button id="deleteWorkspaceButton" class="secondary-action compact danger" type="button" disabled>Delete</button>
                         </div>
 
                         <div id="workspaceMessage" class="workspace-message hidden"></div>

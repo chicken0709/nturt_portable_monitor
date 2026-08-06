@@ -617,37 +617,6 @@ async def get_candecoder_workspace(request: Request):
     except Exception as e:
         return {'error': str(e)}
 
-@app.get('/api/candecoder/workspace/file')
-async def get_candecoder_workspace_file(request: Request):
-    denied = _protected_api_denied(request)
-    if denied:
-        return denied
-    if not can_server:
-        return {'error': 'CAN server not initialized'}
-    try:
-        return can_server.candecoder_sync.read_workspace_file(request.query_params.get('path'))
-    except Exception as e:
-        return {'error': str(e)}
-
-@app.post('/api/candecoder/workspace/file/save')
-async def save_candecoder_workspace_file(request: Request):
-    denied = _protected_api_denied(request)
-    if denied:
-        return denied
-    if not can_server:
-        return {'error': 'CAN server not initialized'}
-    try:
-        data = await request.json()
-    except Exception:
-        data = {}
-    try:
-        return can_server.candecoder_sync.save_workspace_file(
-            data.get('relative_path'),
-            data.get('content'),
-        )
-    except Exception as e:
-        return {'error': str(e)}
-
 @app.post('/api/candecoder/workspace/move')
 async def move_candecoder_workspace_item(request: Request):
     denied = _protected_api_denied(request)
@@ -683,6 +652,22 @@ async def copy_candecoder_workspace_item(request: Request):
             data.get('source_relative_path'),
             data.get('destination_relative_path'),
         )
+    except Exception as e:
+        return {'error': str(e)}
+
+@app.post('/api/candecoder/workspace/delete')
+async def delete_candecoder_workspace_item(request: Request):
+    denied = _protected_api_denied(request)
+    if denied:
+        return denied
+    if not can_server:
+        return {'error': 'CAN server not initialized'}
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    try:
+        return can_server.candecoder_sync.delete_workspace_item(data.get('relative_path'))
     except Exception as e:
         return {'error': str(e)}
 

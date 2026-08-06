@@ -50,12 +50,9 @@ const refreshWorkspaceButton = document.getElementById('refreshWorkspaceButton')
 const workspaceEditor = document.getElementById('workspaceEditor');
 const workspaceSelectedPath = document.getElementById('workspaceSelectedPath');
 const workspaceMoveInput = document.getElementById('workspaceMoveInput');
-const loadWorkspaceFileButton = document.getElementById('loadWorkspaceFileButton');
+const copyWorkspaceButton = document.getElementById('copyWorkspaceButton');
 const moveWorkspaceButton = document.getElementById('moveWorkspaceButton');
-const workspaceContentField = document.getElementById('workspaceContentField');
-const workspaceFileContent = document.getElementById('workspaceFileContent');
-const workspaceFileMeta = document.getElementById('workspaceFileMeta');
-const saveWorkspaceFileButton = document.getElementById('saveWorkspaceFileButton');
+const deleteWorkspaceButton = document.getElementById('deleteWorkspaceButton');
 const workspaceMessage = document.getElementById('workspaceMessage');
 
 const SIGNAL_SEPARATOR = '\u001f';
@@ -76,7 +73,6 @@ let currentTaskState = 'idle';
 let workspaceFetchInFlight = false;
 let selectedWorkspacePath = '';
 let selectedWorkspaceType = '';
-let loadedWorkspaceFilePath = '';
 
 function setError(message) {
     if (!message) {
@@ -274,28 +270,18 @@ function setWorkspaceMessage(message, type = '') {
     workspaceMessage.textContent = message;
 }
 
-function clearWorkspaceFileEditor() {
-    loadedWorkspaceFilePath = '';
-    workspaceFileContent.value = '';
-    workspaceFileMeta.textContent = '-';
-    workspaceContentField.classList.add('hidden');
-    updateWorkspaceEditorControls();
-}
-
 function updateWorkspaceEditorControls() {
     const isBusy = workspaceMutationBusy();
     const hasWorkspaceSelection = Boolean(selectedWorkspacePath) && selectedWorkspaceType !== 'external';
-    const canLoadFile = selectedWorkspaceType === 'file' && hasWorkspaceSelection;
     const moveTarget = normalizeWorkspacePath(workspaceMoveInput.value);
-    const canMove = hasWorkspaceSelection && moveTarget && moveTarget !== selectedWorkspacePath;
+    const canTransfer = hasWorkspaceSelection && moveTarget && moveTarget !== selectedWorkspacePath;
 
     workspaceEditor.classList.toggle('hidden', !selectedWorkspacePath && selectedWorkspaceType !== 'directory');
     workspaceSelectedPath.textContent = selectedWorkspacePath || 'candecoder_workspace';
-    loadWorkspaceFileButton.disabled = !canLoadFile;
     workspaceMoveInput.disabled = isBusy || !hasWorkspaceSelection;
-    moveWorkspaceButton.disabled = isBusy || !canMove;
-    workspaceFileContent.disabled = isBusy || !loadedWorkspaceFilePath;
-    saveWorkspaceFileButton.disabled = isBusy || !loadedWorkspaceFilePath;
+    copyWorkspaceButton.disabled = isBusy || !canTransfer;
+    moveWorkspaceButton.disabled = isBusy || !canTransfer;
+    deleteWorkspaceButton.disabled = isBusy || !hasWorkspaceSelection;
 }
 
 function syncWorkspaceSelectionInTree() {
@@ -309,12 +295,8 @@ function selectWorkspaceNode(relativePath, type) {
     selectedWorkspaceType = type || '';
     workspaceMoveInput.value = DEFAULT_WORKSPACE_COPY_TARGET;
     setWorkspaceMessage('');
-    clearWorkspaceFileEditor();
     updateWorkspaceEditorControls();
     syncWorkspaceSelectionInTree();
-    if (selectedWorkspaceType === 'file' && selectedWorkspacePath) {
-        fetchWorkspaceFile(selectedWorkspacePath);
-    }
 }
 
 function attachWorkspaceNodeEvents() {
@@ -412,65 +394,6 @@ async function fetchWorkspaceTree() {
     }
 }
 
-async function fetchWorkspaceFile(relativePath = selectedWorkspacePath) {
-    const path = normalizeWorkspacePath(relativePath);
-    if (!path) return;
-    loadWorkspaceFileButton.disabled = true;
-    setWorkspaceMessage('');
-    try {
-        const response = await fetch(`/api/candecoder/workspace/file?path=${encodeURIComponent(path)}`);
-        const data = await readCandecoderJson(response);
-        if (selectedWorkspacePath !== path) {
-            return;
-        }
-        if (data.error) {
-            clearWorkspaceFileEditor();
-            setWorkspaceMessage(data.error, 'error');
-            return;
-        }
-
-        loadedWorkspaceFilePath = data.relative_path || path;
-        workspaceFileContent.value = data.content || '';
-        workspaceFileMeta.textContent = `${formatBytes(data.size)} | ${formatFileTime(data.modified)} | ${data.encoding || 'text'}`;
-        workspaceContentField.classList.remove('hidden');
-        updateWorkspaceEditorControls();
-    } catch (error) {
-        clearWorkspaceFileEditor();
-        setWorkspaceMessage(`File load failed: ${error.message}`, 'error');
-    } finally {
-        updateWorkspaceEditorControls();
-    }
-}
-
-async function saveWorkspaceFile() {
-    if (!loadedWorkspaceFilePath) return;
-    saveWorkspaceFileButton.disabled = true;
-    setWorkspaceMessage('');
-    try {
-        const response = await fetch('/api/candecoder/workspace/file/save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                relative_path: loadedWorkspaceFilePath,
-                content: workspaceFileContent.value,
-            }),
-        });
-        const data = await readCandecoderJson(response);
-        if (data.error) {
-            setWorkspaceMessage(data.error, 'error');
-            return;
-        }
-
-        workspaceFileMeta.textContent = `${formatBytes(data.size)} | ${formatFileTime(data.modified)} | ${data.encoding || 'text'}`;
-        setWorkspaceMessage(`Saved ${data.relative_path || loadedWorkspaceFilePath}.`, 'success');
-        fetchWorkspaceTree();
-    } catch (error) {
-        setWorkspaceMessage(`Save failed: ${error.message}`, 'error');
-    } finally {
-        updateWorkspaceEditorControls();
-    }
-}
-
 async function copyWorkspaceItem() {
     const source = selectedWorkspacePath;
     const destination = normalizeWorkspacePath(workspaceMoveInput.value);
@@ -503,15 +426,87 @@ async function copyWorkspaceItem() {
                 ? (copied.destination_relative_path || destination)
                 : (copied.destination_path || destination)
         );
-        loadedWorkspaceFilePath = '';
         renderWorkspaceTree(data.workspace);
         setWorkspaceMessage(`Copied to ${copiedPath}.`, 'success');
-        if (selectedWorkspaceType === 'file') {
-            fetchWorkspaceFile(selectedWorkspacePath);
-        }
         updateWorkspaceEditorControls();
     } catch (error) {
         setWorkspaceMessage(`Copy failed: ${error.message}`, 'error');
+    } finally {
+        updateWorkspaceEditorControls();
+    }
+}
+
+async function moveWorkspaceItem() {
+    const source = selectedWorkspacePath;
+    const destination = normalizeWorkspacePath(workspaceMoveInput.value);
+    if (!source || !destination || source === destination) {
+        updateWorkspaceEditorControls();
+        return;
+    }
+
+    moveWorkspaceButton.disabled = true;
+    setWorkspaceMessage('');
+    try {
+        const response = await fetch('/api/candecoder/workspace/move', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                source_relative_path: source,
+                destination_relative_path: destination,
+            }),
+        });
+        const data = await readCandecoderJson(response);
+        if (data.error) {
+            setWorkspaceMessage(data.error, 'error');
+            return;
+        }
+
+        const moved = data.moved || {};
+        const movedInsideWorkspace = Boolean(moved.in_workspace);
+        const movedPath = normalizeWorkspacePath(
+            movedInsideWorkspace
+                ? (moved.destination_relative_path || destination)
+                : (moved.destination_path || destination)
+        );
+        selectedWorkspacePath = movedPath;
+        selectedWorkspaceType = movedInsideWorkspace ? (moved.type || selectedWorkspaceType) : 'external';
+        renderWorkspaceTree(data.workspace);
+        setWorkspaceMessage(`Moved to ${movedPath}.`, 'success');
+        updateWorkspaceEditorControls();
+    } catch (error) {
+        setWorkspaceMessage(`Move failed: ${error.message}`, 'error');
+    } finally {
+        updateWorkspaceEditorControls();
+    }
+}
+
+async function deleteWorkspaceItem() {
+    const source = selectedWorkspacePath;
+    if (!source) return;
+    const confirmed = window.confirm(`Delete ${source} from candecoder_workspace?`);
+    if (!confirmed) return;
+
+    deleteWorkspaceButton.disabled = true;
+    setWorkspaceMessage('');
+    try {
+        const response = await fetch('/api/candecoder/workspace/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ relative_path: source }),
+        });
+        const data = await readCandecoderJson(response);
+        if (data.error) {
+            setWorkspaceMessage(data.error, 'error');
+            return;
+        }
+
+        selectedWorkspacePath = source;
+        selectedWorkspaceType = 'external';
+        renderWorkspaceTree(data.workspace);
+        setWorkspaceMessage(`Deleted ${data.deleted?.relative_path || source}.`, 'success');
+        updateWorkspaceEditorControls();
+    } catch (error) {
+        setWorkspaceMessage(`Delete failed: ${error.message}`, 'error');
     } finally {
         updateWorkspaceEditorControls();
     }
@@ -1158,9 +1153,9 @@ pullButton.addEventListener('click', () => startOperation('pull'));
 decodeButton.addEventListener('click', () => startOperation('decode'));
 cancelButton.addEventListener('click', cancelOperation);
 refreshWorkspaceButton.addEventListener('click', fetchWorkspaceTree);
-loadWorkspaceFileButton.addEventListener('click', () => fetchWorkspaceFile());
-saveWorkspaceFileButton.addEventListener('click', saveWorkspaceFile);
-moveWorkspaceButton.addEventListener('click', copyWorkspaceItem);
+copyWorkspaceButton.addEventListener('click', copyWorkspaceItem);
+moveWorkspaceButton.addEventListener('click', moveWorkspaceItem);
+deleteWorkspaceButton.addEventListener('click', deleteWorkspaceItem);
 workspaceMoveInput.addEventListener('input', updateWorkspaceEditorControls);
 selectVisibleRemoteButton.addEventListener('click', () => {
     for (const file of remoteRows) {
