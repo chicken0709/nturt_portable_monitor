@@ -584,49 +584,90 @@
 }
 
 .remote-file-list {
-    max-height: 220px;
-    overflow: auto;
+    height: 280px;
+    max-height: 280px;
+    overflow-y: auto;
+    overflow-x: hidden;
     border: 1px solid rgb(39 39 42);
     border-radius: 7px;
     background: rgb(9 9 11);
+    padding: 6px;
 }
 
 .remote-file-row {
-    display: grid;
-    grid-template-columns: 18px minmax(0, 1fr) 82px 142px;
-    gap: 10px;
-    align-items: center;
-    min-height: 40px;
-    border-bottom: 1px solid rgb(24 24 27);
-    padding: 8px 10px;
+    display: none;
+}
+
+.remote-tree-directory,
+.remote-tree-file {
+    display: block;
+    min-width: 0;
     color: rgb(212 212 216);
     font-size: 12px;
 }
 
-.remote-file-row input {
+.remote-tree-directory > summary,
+.remote-tree-file {
+    display: grid;
+    grid-template-columns: 18px 42px minmax(0, 1fr) minmax(0, 170px);
+    gap: 8px;
+    align-items: center;
+    min-height: 32px;
+    border-radius: 6px;
+    padding: 5px 6px;
+}
+
+.remote-tree-directory > summary {
+    cursor: pointer;
+    list-style: none;
+}
+
+.remote-tree-directory > summary::-webkit-details-marker {
+    display: none;
+}
+
+.remote-tree-directory > summary::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    justify-self: center;
+    border-right: 2px solid rgb(113 113 122);
+    border-bottom: 2px solid rgb(113 113 122);
+    transform: rotate(-45deg);
+    transition: transform 150ms ease;
+}
+
+.remote-tree-directory[open] > summary::before {
+    transform: rotate(45deg);
+}
+
+.remote-tree-directory > summary:hover,
+.remote-tree-file:hover {
+    background: rgb(24 24 27);
+}
+
+.remote-tree-directory > summary input,
+.remote-tree-file input {
     width: 15px;
     height: 15px;
     accent-color: rgb(14 165 233);
 }
 
-.remote-file-row:last-child {
-    border-bottom: 0;
-}
-
-.remote-file-name {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-weight: 800;
-}
-
-.remote-file-size,
-.remote-file-time {
-    color: rgb(113 113 122);
+.remote-tree-directory > summary .workspace-node-type,
+.remote-tree-file .workspace-node-type {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 42px;
+    max-width: 42px;
+    border: 1px solid rgb(39 39 42);
+    border-radius: 5px;
+    background: rgb(24 24 27);
+    color: rgb(125 211 252);
+    padding: 2px 4px;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-    font-size: 11px;
-    text-align: right;
+    font-size: 10px;
+    font-weight: 900;
 }
 
 .workspace-panel {
@@ -686,6 +727,11 @@
     padding: 5px 6px;
 }
 
+.workspace-directory.selection-mode > summary,
+.workspace-file.selection-mode {
+    grid-template-columns: 18px 18px 42px minmax(0, 1fr) minmax(0, 170px);
+}
+
 .workspace-directory > summary {
     cursor: pointer;
     list-style: none;
@@ -725,7 +771,16 @@
     box-shadow: inset 0 0 0 1px rgb(14 165 233 / 0.55);
 }
 
+.workspace-node-select {
+    width: 15px;
+    height: 15px;
+    accent-color: rgb(14 165 233);
+    flex: 0 0 auto;
+}
+
 .workspace-node-type {
+    flex: 0 0 auto; 
+    width: auto;
     min-width: 0;
     overflow: hidden;
     border: 1px solid rgb(39 39 42);

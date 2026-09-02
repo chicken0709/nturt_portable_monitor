@@ -101,6 +101,17 @@ def safe_local_relative_path(value: str) -> Path:
     return Path(*parts)
 
 
+def _normalize_relative_selection(value: str | None, *, root_names: tuple[str, ...] = ("LOGS", "undecoded", "candecoder_workspace")) -> str:
+    text = str(value or "").replace("\\", "/").strip().lstrip("/")
+    if not text or text in {".", "/"}:
+        return ""
+    clean = text.removeprefix("./")
+    parts = [part for part in PurePosixPath(clean).parts if part not in {"", ".", "/", ".."}]
+    while parts and parts[0] in root_names:
+        parts = parts[1:]
+    return "/".join(parts)
+
+
 def format_bytes(value: int) -> str:
     amount = float(value or 0)
     for unit in ("B", "KB", "MB", "GB"):
@@ -299,16 +310,25 @@ class CANDecoderSyncService:
         template_name: str | None = None,
         dbc_names: list[str] | None = None,
         selected_relative_paths: list[str] | None = None,
+        local_selected_relative_paths: list[str] | None = None,
         output_folder_name: str | None = None,
     ) -> dict[str, Any]:
         clean_template = (template_name or "").strip() or None
         clean_dbc_names = [str(name).strip() for name in (dbc_names or []) if str(name).strip()]
         clean_selected_paths = self._clean_selected_relative_paths(selected_relative_paths)
+        clean_local_selected_paths = self._clean_selected_relative_paths(local_selected_relative_paths)
         clean_output_folder = self._clean_output_folder_name(output_folder_name)
         return await self._queue_operation(
             "decode",
             "Queued CAN log decode",
-            lambda task_id: self._run_decode(task_id, clean_template, clean_dbc_names, clean_selected_paths, clean_output_folder),
+            lambda task_id: self._run_decode(
+                task_id,
+                clean_template,
+                clean_dbc_names,
+                clean_selected_paths,
+                clean_local_selected_paths,
+                clean_output_folder,
+            ),
             template_name=clean_template,
             dbc_names=clean_dbc_names,
         )
@@ -324,6 +344,7 @@ class CANDecoderSyncService:
         remote_log_dir: str | None = None,
         dbc_names: list[str] | None = None,
         selected_relative_paths: list[str] | None = None,
+        local_selected_relative_paths: list[str] | None = None,
         output_folder_name: str | None = None,
     ) -> dict[str, Any]:
         clean_template = (template_name or "").strip() or None
@@ -331,6 +352,7 @@ class CANDecoderSyncService:
         source = self._build_source(source_mode, rpi_host, rpi_user, rpi_password, remote_log_dir)
         clean_dbc_names = [str(name).strip() for name in (dbc_names or []) if str(name).strip()]
         clean_selected_paths = self._clean_selected_relative_paths(selected_relative_paths)
+        clean_local_selected_paths = self._clean_selected_relative_paths(local_selected_relative_paths)
         clean_output_folder = self._clean_output_folder_name(output_folder_name)
         return await self._queue_operation(
             "sync_decode",
@@ -342,6 +364,7 @@ class CANDecoderSyncService:
                 source,
                 clean_dbc_names,
                 clean_selected_paths,
+                clean_local_selected_paths,
                 clean_output_folder,
             ),
             template_name=clean_template,
@@ -566,6 +589,7 @@ class CANDecoderSyncService:
                 folders=folders,
                 remote_files=remote_files,
                 local_raw_files=[str(self._raw_path(raw_dir, entry)) for entry in remote_files if self._raw_path(raw_dir, entry).exists()],
+                workspace=self.workspace_tree(),
                 progress={"manifest": str(manifest_path), "decoded_folder": str(decoded_dir)},
             )
 
@@ -577,12 +601,14 @@ class CANDecoderSyncService:
         template_name: str | None,
         dbc_names: list[str],
         selected_relative_paths: list[str],
+        local_selected_relative_paths: list[str],
         output_folder_name: str | None,
     ) -> None:
         async def body() -> None:
             raw_dir, decoded_dir, folders, folder_suffix = await self._prepare_folders(template_name, output_folder_name)
             dbc_paths, selected = self._prepare_decode_inputs(template_name, dbc_names)
-            raw_files = self._selected_raw_files(raw_dir, selected_relative_paths)
+            decode_target_paths = self._clean_selected_relative_paths(local_selected_relative_paths or selected_relative_paths)
+            raw_files = self._selected_raw_files(raw_dir, decode_target_paths)
             await self._emit(
                 "info",
                 f"Selected {len(raw_files)} local raw CSV file(s)",
@@ -614,6 +640,7 @@ class CANDecoderSyncService:
                     "template_name": template_name,
                     "output_folder_name": output_folder_name,
                     "selected_relative_paths": selected_relative_paths,
+                    "local_selected_relative_paths": decode_target_paths,
                     "folders": folders,
                     "dbc_paths": [str(path) for path in dbc_paths],
                     "raw_files": [str(path) for path in raw_files],
@@ -645,6 +672,7 @@ class CANDecoderSyncService:
         source: SourceConfig,
         dbc_names: list[str],
         selected_relative_paths: list[str],
+        local_selected_relative_paths: list[str],
         output_folder_name: str | None,
     ) -> None:
         async def body() -> None:
@@ -662,7 +690,10 @@ class CANDecoderSyncService:
             self._check_cancelled()
             self._write_state(state)
 
+            decode_target_paths = self._clean_selected_relative_paths(local_selected_relative_paths or selected_relative_paths)
             raw_files = [self._raw_path(raw_dir, entry) for entry in remote_files if self._raw_path(raw_dir, entry).exists()]
+            if decode_target_paths:
+                raw_files = self._selected_raw_files(raw_dir, decode_target_paths)
             decoded, decode_skipped = await self._decode_raw_files(
                 raw_files=raw_files,
                 raw_dir=raw_dir,
@@ -684,6 +715,7 @@ class CANDecoderSyncService:
                     "pattern": pattern,
                     "source": source.public_dict(),
                     "selected_relative_paths": selected_relative_paths,
+                    "local_selected_relative_paths": decode_target_paths,
                     "folders": folders,
                     "dbc_paths": [str(path) for path in dbc_paths],
                     "remote_files": remote_files,
@@ -814,14 +846,59 @@ class CANDecoderSyncService:
             key=lambda path: str(path.relative_to(raw_dir)).lower(),
         )
 
+    def _normalize_local_raw_selection(self, selected_relative_paths: list[str]) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for relative_path in selected_relative_paths:
+            clean = _normalize_relative_selection(relative_path, root_names=("candecoder_workspace", "undecoded"))
+            if not clean or clean in seen:
+                continue
+            seen.add(clean)
+            normalized.append(clean)
+        return normalized
+
+    def _expand_local_raw_selection(self, raw_dir: Path, selected_relative_paths: list[str]) -> list[str]:
+        expanded: list[str] = []
+        seen: set[str] = set()
+        for relative_path in self._normalize_local_raw_selection(selected_relative_paths):
+            local_path = raw_dir / safe_local_relative_path(relative_path)
+            if local_path.is_dir():
+                matches = sorted(
+                    (
+                        str(path.relative_to(raw_dir)).replace("\\", "/")
+                        for path in local_path.iterdir()
+                        if path.is_file() and path.name.lower().endswith(".csv") and not path.name.lower().endswith("_decoded.csv")
+                    ),
+                    key=lambda value: value.lower(),
+                )
+                for item in matches:
+                    if item in seen:
+                        continue
+                    seen.add(item)
+                    expanded.append(item)
+                continue
+            if local_path.exists() and local_path.is_file() and local_path.name.lower().endswith(".csv") and not local_path.name.lower().endswith("_decoded.csv"):
+                key = str(local_path.relative_to(raw_dir)).replace("\\", "/")
+                if key in seen:
+                    continue
+                seen.add(key)
+                expanded.append(key)
+            else:
+                key = str(local_path.relative_to(raw_dir)).replace("\\", "/") if local_path.parent != raw_dir else relative_path
+                if key not in seen:
+                    seen.add(key)
+                    expanded.append(key)
+        return expanded
+
     def _selected_raw_files(self, raw_dir: Path, selected_relative_paths: list[str]) -> list[Path]:
         self._check_cancelled()
-        if not selected_relative_paths:
+        expanded_paths = self._expand_local_raw_selection(raw_dir, selected_relative_paths)
+        if not expanded_paths:
             return []
         raw_files: list[Path] = []
         missing: list[str] = []
         seen: set[str] = set()
-        for relative_path in selected_relative_paths:
+        for relative_path in expanded_paths:
             self._check_cancelled()
             safe_path = safe_local_relative_path(relative_path)
             raw_path = raw_dir / safe_path
@@ -845,7 +922,7 @@ class CANDecoderSyncService:
         cleaned: list[str] = []
         seen: set[str] = set()
         for raw_path in paths or []:
-            text = str(raw_path or "").replace("\\", "/").strip()
+            text = _normalize_relative_selection(raw_path)
             if not text or text in seen:
                 continue
             seen.add(text)
@@ -857,16 +934,29 @@ class CANDecoderSyncService:
         remote_files: list[dict[str, Any]],
         selected_relative_paths: list[str],
     ) -> list[dict[str, Any]]:
-        selected_set = set(selected_relative_paths)
+        selected_set = {
+            _normalize_relative_selection(value)
+            for value in selected_relative_paths
+            if _normalize_relative_selection(value)
+        }
         filtered = remote_files
         selection_note = "all listed files"
 
         if selected_set:
-            filtered = [
-                row
-                for row in remote_files
-                if str(row.get("relative_path") or row.get("name") or "").replace("\\", "/") in selected_set
-            ]
+            normalized_selected = {path.rstrip("/") for path in selected_set if path}
+            filtered = []
+            for row in remote_files:
+                relative_path = _normalize_relative_selection(row.get("relative_path") or row.get("name") or "")
+                if not relative_path:
+                    continue
+                matches = relative_path in normalized_selected
+                if not matches:
+                    for selected in normalized_selected:
+                        if selected and relative_path.startswith(f"{selected.rstrip('/')}/"):
+                            matches = True
+                            break
+                if matches:
+                    filtered.append(row)
             selection_note = f"{len(filtered)} selected file(s)"
 
         await self._emit(

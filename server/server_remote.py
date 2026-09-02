@@ -727,6 +727,7 @@ async def decode_candecoder_files(request: Request):
         template_name=data.get('template_name'),
         dbc_names=data.get('dbc_names') or [],
         selected_relative_paths=data.get('selected_relative_paths') or [],
+        local_selected_relative_paths=data.get('selected_local_relative_paths') or data.get('selected_relative_paths') or [],
         output_folder_name=data.get('output_folder_name'),
     )
 
@@ -760,6 +761,7 @@ async def start_candecoder(request: Request):
         remote_log_dir=data.get('remote_log_dir'),
         dbc_names=data.get('dbc_names') or [],
         selected_relative_paths=data.get('selected_relative_paths') or [],
+        local_selected_relative_paths=data.get('selected_local_relative_paths') or data.get('selected_relative_paths') or [],
         output_folder_name=data.get('output_folder_name'),
     )
 

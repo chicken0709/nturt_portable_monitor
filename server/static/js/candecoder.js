@@ -46,6 +46,8 @@ const selectVisibleRemoteButton = document.getElementById('selectVisibleRemoteBu
 const clearRemoteSelectionButton = document.getElementById('clearRemoteSelectionButton');
 const workspaceTree = document.getElementById('workspaceTree');
 const workspaceTreeCount = document.getElementById('workspaceTreeCount');
+const selectLocalDecodeFilesButton = document.getElementById('selectLocalDecodeFilesButton');
+const cancelLocalSelectionButton = document.getElementById('cancelLocalSelectionButton');
 const refreshWorkspaceButton = document.getElementById('refreshWorkspaceButton');
 const workspaceEditor = document.getElementById('workspaceEditor');
 const workspaceSelectedPath = document.getElementById('workspaceSelectedPath');
@@ -69,10 +71,16 @@ let editorSelectedSignals = new Set();
 let templateTextDirty = false;
 let remoteRows = [];
 let selectedRemotePaths = new Set();
+let expandedRemoteDirectories = new Set();
+let lastRemoteTreeSignature = '';
+let remoteSelectionMode = false;
+let selectedLocalPaths = new Set();
 let currentTaskState = 'idle';
 let workspaceFetchInFlight = false;
 let selectedWorkspacePath = '';
 let selectedWorkspaceType = '';
+let workspaceTreeData = null;
+let localSelectionMode = false;
 
 function setError(message) {
     if (!message) {
@@ -178,8 +186,88 @@ function remoteFileKey(file) {
     return String(file?.relative_path || file?.filename || file?.name || file?.path || '');
 }
 
+function normalizeRemotePath(value) {
+    return String(value || '').replaceAll('\\', '/').trim().replace(/^\/+/, '');
+}
+
+function remotePathMatchesSelection(path, selectedValue) {
+    const normalizedPath = normalizeRemotePath(path);
+    const normalizedSelected = normalizeRemotePath(selectedValue);
+    if (!normalizedPath || !normalizedSelected) return false;
+    if (normalizedPath === normalizedSelected) return true;
+    return normalizedPath.startsWith(`${normalizedSelected.replace(/\/$/, '')}/`);
+}
+
+function expandRemoteSelectionValues() {
+    const expanded = new Set();
+    for (const selectedValue of selectedRemotePaths) {
+        const normalizedSelected = normalizeRemotePath(selectedValue);
+        if (!normalizedSelected) continue;
+
+        const matches = remoteRows.filter((file) => {
+            const relativePath = normalizeRemotePath(remoteFileKey(file));
+            return relativePath && remotePathMatchesSelection(relativePath, normalizedSelected);
+        });
+
+        if (matches.length) {
+            for (const file of matches) {
+                const key = remoteFileKey(file);
+                if (key) expanded.add(normalizeRemotePath(key));
+            }
+            continue;
+        }
+
+        expanded.add(normalizedSelected);
+    }
+    return Array.from(expanded).filter(Boolean);
+}
+
 function selectedRemotePathList() {
-    return Array.from(selectedRemotePaths);
+    return expandRemoteSelectionValues();
+}
+
+function selectedLocalPathList() {
+    return Array.from(selectedLocalPaths);
+}
+
+function localPathIncludedInSelection(relativePath) {
+    const target = normalizeWorkspacePath(relativePath || '');
+    if (!target) return false;
+    return Array.from(selectedLocalPaths).some((value) => {
+        const item = normalizeWorkspacePath(value || '');
+        return item === target || item.startsWith(`${target}/`);
+    });
+}
+
+function collectDirectoryCsvPaths(rootNode, targetDirPath = '') {
+    const cleanTarget = normalizeWorkspacePath(targetDirPath || '');
+    if (!rootNode || !cleanTarget) return [];
+
+    const paths = [];
+    function walk(node) {
+        if (!node) return false;
+        const currentPath = normalizeWorkspacePath(node.relative_path || '');
+        if (node.type === 'directory' && currentPath === cleanTarget) {
+            if (Array.isArray(node.children)) {
+                for (const child of node.children) {
+                    const childPath = normalizeWorkspacePath(child.relative_path || '');
+                    if (child.type === 'file' && child.name && child.name.toLowerCase().endsWith('.csv')) {
+                        paths.push(childPath);
+                    }
+                }
+            }
+            return true;
+        }
+        if (Array.isArray(node.children)) {
+            for (const child of node.children) {
+                if (walk(child)) return true;
+            }
+        }
+        return false;
+    }
+
+    walk(rootNode);
+    return paths;
 }
 
 function defaultDecodeFolderName() {
@@ -196,45 +284,264 @@ function defaultDecodeFolderName() {
     ].join('_');
 }
 
-function renderRemoteFiles(files) {
-    remoteRows = Array.isArray(files) ? files : [];
-    const liveKeys = new Set(remoteRows.map(remoteFileKey).filter(Boolean));
-    selectedRemotePaths = new Set(Array.from(selectedRemotePaths).filter((key) => liveKeys.has(key)));
+function buildRemoteTree(files) {
+    const root = {
+        name: 'LOGS',
+        relative_path: '',
+        path: '',
+        type: 'directory',
+        children: [],
+    };
 
-    const selectedCount = selectedRemotePaths.size;
+    for (const file of files) {
+        const relativePath = normalizeRemotePath(remoteFileKey(file));
+        if (!relativePath) continue;
+        const parts = relativePath.split('/').filter(Boolean);
+        let node = root;
+        for (let index = 0; index < parts.length - 1; index += 1) {
+            const part = parts[index];
+            let child = node.children.find((entry) => entry.name === part && entry.type === 'directory');
+            if (!child) {
+                child = {
+                    name: part,
+                    relative_path: parts.slice(0, index + 1).join('/'),
+                    path: '',
+                    type: 'directory',
+                    modified: null,
+                    children: [],
+                };
+                node.children.push(child);
+            }
+            node = child;
+        }
+
+        const fileName = parts[parts.length - 1] || relativePath;
+        const fileEntry = {
+            name: fileName,
+            relative_path: relativePath,
+            path: relativePath,
+            type: 'file',
+            size: Number(file.size || 0),
+            modified: file.modified || file.mtime,
+            children: [],
+        };
+        node.children.push(fileEntry);
+        let current = node;
+        while (current) {
+            const nextModified = current.modified ? new Date(current.modified).getTime() : 0;
+            const candidate = new Date(fileEntry.modified || 0).getTime();
+            if (!current.modified || candidate > nextModified) {
+                current.modified = fileEntry.modified || file.mtime;
+            }
+            current = current.parent || null;
+        }
+    }
+
+    function assignParentPointers(node, parent = null) {
+        node.parent = parent;
+        for (const child of node.children || []) {
+            assignParentPointers(child, node);
+        }
+    }
+
+    assignParentPointers(root);
+    function finalizeDirectoryTimes(node) {
+        if (!node || node.type !== 'directory') return;
+        if (node.children.length === 0) {
+            node.modified = node.modified || null;
+            return;
+        }
+        for (const child of node.children) {
+            finalizeDirectoryTimes(child);
+        }
+        const latestChild = [...node.children].filter((entry) => entry.modified).sort((left, right) => {
+            const leftTime = new Date(left.modified).getTime();
+            const rightTime = new Date(right.modified).getTime();
+            return rightTime - leftTime;
+        })[0];
+        node.modified = latestChild ? latestChild.modified : node.modified;
+    }
+
+    finalizeDirectoryTimes(root);
+
+    root.children.sort((left, right) => String(left.name).toLocaleLowerCase().localeCompare(String(right.name).toLocaleLowerCase()));
+    for (const child of root.children) {
+        child.children.sort((left, right) => String(left.name).toLocaleLowerCase().localeCompare(String(right.name).toLocaleLowerCase()));
+    }
+    return root;
+}
+
+function remoteTreeNodeSelected(nodePath) {
+    const normalized = normalizeRemotePath(nodePath);
+    if (!normalized) return false;
+    return Array.from(selectedRemotePaths).some((value) => {
+        const selected = normalizeRemotePath(value);
+        return selected === normalized || selected.startsWith(`${normalized}/`);
+    });
+}
+
+function toggleRemoteSelectionMode(enabled) {
+    remoteSelectionMode = Boolean(enabled);
+    if (!remoteSelectionMode) {
+        selectedRemotePaths.clear();
+    }
+    renderRemoteFiles(remoteRows, true);
+}
+
+function syncRemoteTreeCheckboxes() {
+    if (!remoteSelectionMode) return;
+
+    const allSelected = remoteRows.length > 0 && remoteRows.every((file) => {
+        const key = normalizeRemotePath(remoteFileKey(file));
+        return key && selectedRemotePaths.has(key);
+    });
+
+    for (const checkbox of remoteFileList.querySelectorAll('input[data-remote-select]')) {
+        const value = normalizeRemotePath(checkbox.value || '');
+        const isRoot = value === '';
+        let checked = false;
+        if (isRoot) {
+            checked = allSelected;
+        } else if (checkbox.closest('.workspace-directory')) {
+            checked = remoteTreeNodeSelected(value);
+        } else {
+            checked = selectedRemotePaths.has(value);
+        }
+        checkbox.checked = checked;
+    }
+}
+
+function renderRemoteTreeNode(node, level = 0) {
+    const relativePath = normalizeRemotePath(node.relative_path || '');
+    const isDirectory = node.type === 'directory';
+    const isRoot = isDirectory && !relativePath;
+    const checked = isRoot
+        ? false
+        : (isDirectory
+            ? remoteTreeNodeSelected(relativePath)
+            : selectedRemotePaths.has(relativePath));
+    const disabled = currentTaskState === 'running' || currentTaskState === 'canceling';
+    const selectionModeClass = remoteSelectionMode ? 'selection-mode' : '';
+    const selectionCheckbox = remoteSelectionMode
+        ? `<input type="checkbox" data-remote-select value="${escapeHtml(relativePath || '')}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}>`
+        : '';
+
+    if (isDirectory) {
+        const children = Array.isArray(node.children) ? node.children.map((child) => renderRemoteTreeNode(child, level + 1)).join('') : '';
+        const childCount = Array.isArray(node.children) ? node.children.length : 0;
+        const meta = childCount ? `${childCount} ${childCount === 1 ? 'child' : 'children'}` : '0 children';
+        const summary = `
+            <summary data-remote-path="${escapeHtml(relativePath || '')}" title="${escapeHtml(relativePath || node.name)}">
+            ${selectionCheckbox}
+            <span class="workspace-node-type">DIR</span>
+                <span class="workspace-node-name">${escapeHtml(node.name)}</span>
+                ${renderWorkspaceMeta([meta, formatFileTime(node.modified)])}
+            </summary>
+        `;
+        return `
+            <details class="workspace-node workspace-directory ${selectionModeClass}" data-remote-path="${escapeHtml(relativePath || '')}" ${level === 0 || expandedRemoteDirectories.has(relativePath) ? 'open' : ''}>
+                ${summary}
+                ${children ? `<div class="workspace-children">${children}</div>` : ''}
+            </details>
+        `;
+    }
+
+    return `
+        <div class="workspace-node workspace-file ${selectionModeClass}" data-remote-path="${escapeHtml(relativePath || '')}" title="${escapeHtml(relativePath)}">
+        ${selectionCheckbox}
+        <span class="workspace-node-type">CSV</span>
+            <span class="workspace-node-name">${escapeHtml(node.name)}</span>
+            ${renderWorkspaceMeta([formatBytes(node.size || 0), formatFileTime(node.modified)])}
+        </div>
+    `;
+}
+
+function renderRemoteFiles(files, force = false) {
+    const nextRows = Array.isArray(files) ? files : [];
+    const nextSignature = [...new Set(
+        nextRows.map((file) => normalizeRemotePath(remoteFileKey(file))).filter(Boolean)
+    )].sort().join('|');
+    const isSameList = nextSignature === lastRemoteTreeSignature && !force;
+
+    remoteRows = nextRows;
+    const liveKeys = new Set(remoteRows.map(remoteFileKey).map(normalizeRemotePath).filter(Boolean));
+    const currentlyExpanded = new Set(
+        Array.from(remoteFileList.querySelectorAll('details[data-remote-path]')).map((node) => normalizeRemotePath(node.dataset.remotePath || '')).filter(Boolean)
+    );
+    expandedRemoteDirectories = new Set(Array.from(currentlyExpanded).filter(Boolean));
+    selectedRemotePaths = new Set(Array.from(selectedRemotePaths).map(normalizeRemotePath).filter((key) => liveKeys.has(key) || remoteRows.some((file) => remotePathMatchesSelection(normalizeRemotePath(remoteFileKey(file)), key))));
+
+    const selectedCount = expandRemoteSelectionValues().length;
     const fileLabel = remoteRows.length === 1 ? '1 file' : `${remoteRows.length} files`;
     remoteListCount.textContent = selectedCount ? `${selectedCount} / ${fileLabel}` : fileLabel;
     const isBusy = currentTaskState === 'running' || currentTaskState === 'canceling';
     selectVisibleRemoteButton.disabled = isBusy || !remoteRows.length;
-    clearRemoteSelectionButton.disabled = isBusy || !selectedRemotePaths.size;
+    clearRemoteSelectionButton.disabled = isBusy || (!remoteSelectionMode && !selectedRemotePaths.size);
     if (!remoteRows.length) {
         remoteFileList.innerHTML = '<div class="empty-state">No remote files listed</div>';
+        lastRemoteTreeSignature = '';
         return;
     }
 
-    remoteFileList.innerHTML = remoteRows.map((file) => {
-        const name = file.relative_path || file.filename || file.name || file.path || '-';
-        const key = remoteFileKey(file);
-        const checked = selectedRemotePaths.has(key) ? 'checked' : '';
-        const disabled = isBusy ? 'disabled' : '';
-        return `
-            <div class="remote-file-row">
-                <input type="checkbox" value="${escapeHtml(key)}" ${checked} ${disabled} aria-label="Select ${escapeHtml(name)}">
-                <span class="remote-file-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
-                <span class="remote-file-size">${escapeHtml(formatBytes(file.size))}</span>
-                <span class="remote-file-time">${escapeHtml(formatFileTime(file.modified || file.mtime))}</span>
-            </div>
-        `;
-    }).join('');
+    if (isSameList) {
+        return;
+    }
 
-    for (const checkbox of remoteFileList.querySelectorAll('input[type="checkbox"]')) {
-        checkbox.addEventListener('change', () => {
-            if (checkbox.checked) {
-                selectedRemotePaths.add(checkbox.value);
+    const tree = buildRemoteTree(remoteRows);
+    remoteFileList.innerHTML = renderRemoteTreeNode(tree);
+    lastRemoteTreeSignature = nextSignature;
+
+    for (const details of remoteFileList.querySelectorAll('details[data-remote-path]')) {
+        details.addEventListener('toggle', () => {
+            const path = normalizeRemotePath(details.dataset.remotePath || '');
+            if (!path) return;
+            if (details.open) {
+                expandedRemoteDirectories.add(path);
             } else {
-                selectedRemotePaths.delete(checkbox.value);
+                expandedRemoteDirectories.delete(path);
             }
-            renderRemoteFiles(remoteRows);
+        });
+    }
+
+    for (const checkbox of remoteFileList.querySelectorAll('input[data-remote-select]')) {
+        checkbox.addEventListener('change', () => {
+            const value = normalizeRemotePath(checkbox.value || '');
+            if (!value && remoteRows.length) {
+                if (checkbox.checked) {
+                    for (const file of remoteRows) {
+                        const key = normalizeRemotePath(remoteFileKey(file));
+                        if (key) selectedRemotePaths.add(key);
+                    }
+                } else {
+                    selectedRemotePaths.clear();
+                }
+            } else if (checkbox.closest('.workspace-directory')) {
+                const descendantPaths = remoteRows
+                    .map((file) => normalizeRemotePath(remoteFileKey(file)))
+                    .filter((filePath) => filePath && filePath.startsWith(`${value}/`));
+                if (checkbox.checked) {
+                    selectedRemotePaths.add(value);
+                    for (const filePath of descendantPaths) {
+                        selectedRemotePaths.add(filePath);
+                    }
+                } else {
+                    selectedRemotePaths.delete(value);
+                    for (const filePath of descendantPaths) {
+                        selectedRemotePaths.delete(filePath);
+                    }
+                }
+            } else {
+                if (checkbox.checked) {
+                    selectedRemotePaths.add(value);
+                } else {
+                    selectedRemotePaths.delete(value);
+                }
+            }
+
+            const selectedCount = expandRemoteSelectionValues().length;
+            const fileLabel = remoteRows.length === 1 ? '1 file' : `${remoteRows.length} files`;
+            remoteListCount.textContent = selectedCount ? `${selectedCount} / ${fileLabel}` : fileLabel;
+            syncRemoteTreeCheckboxes();
         });
     }
 }
@@ -258,6 +565,18 @@ function normalizeWorkspacePath(value) {
 
 function workspaceMutationBusy() {
     return currentTaskState === 'running' || currentTaskState === 'canceling';
+}
+
+function toggleLocalSelectionMode(enabled) {
+    localSelectionMode = Boolean(enabled);
+    selectLocalDecodeFilesButton.disabled = localSelectionMode || workspaceMutationBusy();
+    cancelLocalSelectionButton.disabled = !localSelectionMode || workspaceMutationBusy();
+    if (!localSelectionMode) {
+        selectedLocalPaths.clear();
+    }
+    if (workspaceTreeData) {
+        renderWorkspaceTree(workspaceTreeData);
+    }
 }
 
 function setWorkspaceMessage(message, type = '') {
@@ -306,6 +625,38 @@ function attachWorkspaceNodeEvents() {
             selectWorkspaceNode(item.dataset.workspacePath || '', item.dataset.workspaceType || '');
         });
     }
+    for (const item of workspaceTree.querySelectorAll('[data-local-select]')) {
+        item.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const value = normalizeWorkspacePath(item.value || '');
+            if (!value) return;
+            if (item.checked) {
+                selectedLocalPaths.add(value);
+            } else {
+                selectedLocalPaths.delete(value);
+            }
+        });
+    }
+    for (const item of workspaceTree.querySelectorAll('[data-local-dir-select]')) {
+        item.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const value = normalizeWorkspacePath(item.value || '');
+            if (!value) return;
+            const csvPaths = collectDirectoryCsvPaths(workspaceTreeData?.tree || null, value);
+            if (item.checked) {
+                selectedLocalPaths.add(value);
+                for (const path of csvPaths) {
+                    selectedLocalPaths.add(path);
+                }
+            } else {
+                selectedLocalPaths.delete(value);
+                for (const path of csvPaths) {
+                    selectedLocalPaths.delete(path);
+                }
+            }
+            renderWorkspaceTree(workspaceTreeData);
+        });
+    }
     syncWorkspaceSelectionInTree();
 }
 
@@ -329,14 +680,22 @@ function renderWorkspaceNode(node, isRoot = false) {
     const title = node.path || node.relative_path || name;
     const typeLabel = workspaceTypeLabel(node);
 
+    const selectionModeClass = localSelectionMode ? 'selection-mode' : '';
+
     if (kind === 'directory') {
         const children = Array.isArray(node.children) ? node.children : [];
         const open = isRoot || !String(node.relative_path || '').includes('/') ? 'open' : '';
         const childLabel = children.length === 1 ? '1 child' : `${children.length} children`;
         const error = node.error ? `<div class="workspace-node-error">${escapeHtml(node.error)}</div>` : '';
+        const directoryRelativePath = normalizeWorkspacePath(node.relative_path || '');
+        const selectedLocal = localSelectionMode && localPathIncludedInSelection(directoryRelativePath) ? 'checked' : '';
+        const selectionCheckbox = localSelectionMode
+            ? `<input type="checkbox" class="workspace-node-select" data-local-dir-select value="${escapeHtml(node.relative_path || '')}" ${selectedLocal}>`
+            : '';
         return `
-            <details class="workspace-node workspace-directory" ${open}>
+            <details class="workspace-node workspace-directory ${selectionModeClass}" ${open}>
                 <summary data-workspace-path="${escapeHtml(node.relative_path || '')}" data-workspace-type="${escapeHtml(node.type || 'directory')}" title="${escapeHtml(title)}">
+                    ${selectionCheckbox}
                     <span class="workspace-node-type">${escapeHtml(typeLabel)}</span>
                     <span class="workspace-node-name">${escapeHtml(name)}</span>
                     ${renderWorkspaceMeta([childLabel, formatFileTime(node.modified)])}
@@ -349,8 +708,13 @@ function renderWorkspaceNode(node, isRoot = false) {
 
     const sizeLabel = typeof node.size === 'number' ? formatBytes(node.size) : '';
     const error = node.error ? node.error : '';
+    const selectedLocal = localSelectionMode && selectedLocalPaths.has(normalizeWorkspacePath(node.relative_path || '')) ? 'checked' : '';
+    const selectionCheckbox = localSelectionMode
+        ? `<input type="checkbox" class="workspace-node-select" data-local-select value="${escapeHtml(node.relative_path || '')}" ${selectedLocal}>`
+        : '';
     return `
-        <div class="workspace-node workspace-file" data-workspace-path="${escapeHtml(node.relative_path || '')}" data-workspace-type="${escapeHtml(node.type || 'file')}" title="${escapeHtml(title)}">
+        <div class="workspace-node workspace-file ${selectionModeClass}" data-workspace-path="${escapeHtml(node.relative_path || '')}" data-workspace-type="${escapeHtml(node.type || 'file')}" title="${escapeHtml(title)}">
+            ${selectionCheckbox}
             <span class="workspace-node-type">${escapeHtml(typeLabel)}</span>
             <span class="workspace-node-name">${escapeHtml(name)}</span>
             ${renderWorkspaceMeta([sizeLabel, formatFileTime(node.modified), error.trim()])}
@@ -359,6 +723,7 @@ function renderWorkspaceNode(node, isRoot = false) {
 }
 
 function renderWorkspaceTree(data) {
+    workspaceTreeData = data || null;
     if (!data || data.error) {
         workspaceTreeCount.textContent = '-';
         workspaceTree.innerHTML = `<div class="empty-state">${escapeHtml(data?.error || 'Workspace tree unavailable')}</div>`;
@@ -596,7 +961,12 @@ function updateStatus(rawStatus) {
     undecodedFolder.textContent = status.folders?.undecoded || '-';
     decodedFolder.textContent = status.folders?.decoded || '-';
     setRunningDisabled(currentTaskState === 'running' || currentTaskState === 'canceling', currentTaskState);
-    renderRemoteFiles(status.remote_files || []);
+
+    const shouldReplaceRemoteList = status.operation === 'list' || status.phase === 'listing';
+    const nextRemoteFiles = shouldReplaceRemoteList
+        ? (Array.isArray(status.remote_files) ? status.remote_files : [])
+        : (remoteRows.length ? remoteRows : (Array.isArray(status.remote_files) ? status.remote_files : []));
+    renderRemoteFiles(nextRemoteFiles, Boolean(shouldReplaceRemoteList));
 
     setError(status.error || '');
     renderEvents(status.events || []);
@@ -1059,8 +1429,8 @@ async function startOperation(operation) {
         setRunningDisabled(false);
         return;
     }
-    if (operation === 'decode' && !selectedRemotePaths.size) {
-        setError('Select pulled file(s) from the file list before decoding.');
+    if (operation === 'decode' && !selectedLocalPaths.size) {
+        setError('Select local raw file(s) from the workspace before decoding.');
         setRunningDisabled(false);
         return;
     }
@@ -1086,6 +1456,7 @@ async function startOperation(operation) {
             template_name: templateSelect.value || null,
             dbc_names: selectedDbcs,
             selected_relative_paths: selectedRemotePathList(),
+            selected_local_relative_paths: selectedLocalPathList(),
             output_folder_name: decodeFolderInput.value.trim(),
         }
         : operation === 'pull'
@@ -1093,6 +1464,7 @@ async function startOperation(operation) {
             : buildSourcePayload();
 
     try {
+        const previousRemoteRows = [...remoteRows];
         const response = await fetch(endpointByOperation[operation], {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1105,6 +1477,13 @@ async function startOperation(operation) {
             return;
         }
         updateStatus(data);
+        if (operation === 'pull' || operation === 'decode') {
+            remoteSelectionMode = false;
+            selectedRemotePaths.clear();
+            const restoredRows = previousRemoteRows.length ? previousRemoteRows : (Array.isArray(data.remote_files) ? data.remote_files : remoteRows);
+            renderRemoteFiles(restoredRows, true);
+            await fetchWorkspaceTree();
+        }
     } catch (error) {
         setError(`Start failed: ${error.message}`);
         setRunningDisabled(false);
@@ -1152,21 +1531,29 @@ listButton.addEventListener('click', () => startOperation('list'));
 pullButton.addEventListener('click', () => startOperation('pull'));
 decodeButton.addEventListener('click', () => startOperation('decode'));
 cancelButton.addEventListener('click', cancelOperation);
+selectLocalDecodeFilesButton.addEventListener('click', () => {
+    if (workspaceMutationBusy()) return;
+    toggleLocalSelectionMode(true);
+});
+cancelLocalSelectionButton.addEventListener('click', () => {
+    if (workspaceMutationBusy()) return;
+    toggleLocalSelectionMode(false);
+});
 refreshWorkspaceButton.addEventListener('click', fetchWorkspaceTree);
 copyWorkspaceButton.addEventListener('click', copyWorkspaceItem);
 moveWorkspaceButton.addEventListener('click', moveWorkspaceItem);
 deleteWorkspaceButton.addEventListener('click', deleteWorkspaceItem);
 workspaceMoveInput.addEventListener('input', updateWorkspaceEditorControls);
 selectVisibleRemoteButton.addEventListener('click', () => {
-    for (const file of remoteRows) {
-        const key = remoteFileKey(file);
-        if (key) selectedRemotePaths.add(key);
-    }
-    renderRemoteFiles(remoteRows);
+    if (currentTaskState === 'running' || currentTaskState === 'canceling') return;
+    remoteSelectionMode = true;
+    renderRemoteFiles(remoteRows, true);
 });
 clearRemoteSelectionButton.addEventListener('click', () => {
+    if (currentTaskState === 'running' || currentTaskState === 'canceling') return;
     selectedRemotePaths.clear();
-    renderRemoteFiles(remoteRows);
+    remoteSelectionMode = false;
+    renderRemoteFiles(remoteRows, true);
 });
 sourceMode.addEventListener('change', updateSourceFields);
 templateEditorSelect.addEventListener('change', () => loadTemplateIntoEditor(templateEditorSelect.value));
