@@ -453,7 +453,7 @@ function renderRemoteTreeNode(node, level = 0) {
     `;
 }
 
-function renderRemoteFiles(files) {
+function renderRemoteFiles(files, forceRender = false) {
     const nextRows = Array.isArray(files) ? files : [];
     const nextSignature = [...new Set(
         nextRows.map((file) => normalizeRemotePath(remoteFileKey(file))).filter(Boolean)
@@ -476,7 +476,7 @@ function renderRemoteFiles(files) {
         return;
     }
 
-    if (isSameList) {
+    if (isSameList && !forceRender) {
         return;
     }
 
