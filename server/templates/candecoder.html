@@ -9,33 +9,50 @@
     <script src="/static/js/candecoder.js" defer></script>
     <link rel="stylesheet" href="/static/css/candecoder.css">
 </head>
-<body class="min-h-screen bg-zinc-950 text-zinc-100 font-sans antialiased">
-    <main class="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-5 px-5 py-6 lg:px-8">
-        <header class="flex flex-col gap-4 border-b border-zinc-800 pb-5 md:flex-row md:items-end md:justify-between">
+<body class="bg-zinc-950 text-zinc-100 font-sans antialiased">
+    <main class="mx-auto flex flex-col gap-5 px-4 py-6 lg:px-8">
+        <header class="grid grid-cols-1 md:grid-cols-[auto_1fr] items-center gap-4 border-b border-zinc-800 pb-5">
+            <!-- Title (Left) -->
             <div>
-                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-sky-400">NTURT Remote Monitor</p>
-                <h1 class="mt-2 text-3xl font-bold tracking-tight text-white">CAN Log Decoder</h1>
-                <div class="header-actions">
-                    <a href="/">Home</a>
-                    <a href="/adminshell/logout">Logout</a>
-                </div>
+                <h1 class="text-4xl font-bold text-white tracking-tight">
+                    NTURT <span class="text-sky-400">CAN Log Decoder</span>
+                </h1>
+                <p class="text-zinc-500 mt-2 text-sm">Remote CAN Log Fetcher & Decoder</p>
             </div>
-            <div class="status-strip">
-                <div>
-                    <span class="status-label">Server</span>
-                    <span id="serverState" class="status-value text-emerald-400">Running</span>
-                </div>
-                <div>
-                    <span class="status-label">Pi Client</span>
-                    <span id="vehicleCount" class="status-value text-amber-300">0</span>
-                </div>
-                <div>
-                    <span class="status-label">Task</span>
-                    <span id="taskState" class="status-value text-zinc-300">Idle</span>
+
+            <!-- Right Side: Status Strip & Integrated Buttons (Wrapped safely) -->
+            <div class="md:justify-self-end w-full">
+                <div class="flex flex-wrap items-center justify-end gap-3">
+                    <!-- Status Strip -->
+                    <div class="status-strip">
+                        <div>
+                            <span class="status-label">Server</span>
+                            <span id="serverState" class="status-value text-emerald-400">Running</span>
+                        </div>
+                        <div>
+                            <span class="status-label">Pi Client</span>
+                            <span id="vehicleCount" class="status-value text-amber-300">0</span>
+                        </div>
+                        <div>
+                            <span class="status-label">Task</span>
+                            <span id="taskState" class="status-value text-zinc-300">Idle</span>
+                        </div>
+                    </div>
+
+                    <!-- Styled Header Actions (Buttons) -->
+                    <div class="header-actions flex flex-col">
+                        <a href="/" class="px-3.5 text-sm font-medium text-zinc-300 bg-zinc-900/80 border border-zinc-700 rounded-lg hover:bg-zinc-800 hover:text-white hover:border-zinc-600 transition-colors">
+                            Home
+                        </a>
+                        <a href="/adminshell/logout" class="px-3.5 text-sm font-medium text-red-400 bg-zinc-900/80 border border-zinc-700 rounded-lg hover:bg-zinc-800 hover:text-red-300 hover:border-zinc-600 transition-colors">
+                            Logout
+                        </a>
+                    </div>
                 </div>
             </div>
         </header>
 
+        <!-- Main section split into Setup (Left) and Content Blocks (Right) -->
         <section class="grid min-h-0 grid-cols-1 gap-5 lg:grid-cols-[380px_minmax(0,1fr)]">
             <aside class="panel">
                 <div class="panel-heading">
@@ -63,13 +80,18 @@
                     </div>
 
                     <label class="field">
-                        <span>Remote LOGS Dir</span>
+                        <span>Remote Log Directory</span>
                         <input id="remoteLogDirInput" type="text" value="/home/pi/Desktop/RPI_Desktop/LOGS" autocomplete="off">
                     </label>
                 </div>
 
                 <label class="field">
-                    <span>Template</span>
+                    <span>Remote File Pattern</span>
+                    <input id="patternInput" type="text" value="*.csv" autocomplete="off">
+                </label>
+
+                <label class="field">
+                    <span>Decode Template</span>
                     <select id="templateSelect">
                         <option value="">All DBC signals</option>
                     </select>
@@ -77,8 +99,13 @@
 
                 <label class="field">
                     <span>Decode Output Folder</span>
-                    <input id="decodeFolderInput" type="text" autocomplete="off" placeholder="run_001">
+                    <input id="decodeFolderInput" type="text" autocomplete="off" placeholder="results">
                 </label>
+
+                <div class="field">
+                    <span>DBC Files</span>
+                    <div id="dbcList" class="dbc-list"></div>
+                </div>
 
                 <details id="templateManager" class="template-manager">
                     <summary>
@@ -124,125 +151,124 @@
                         <div id="templateEditorMessage" class="template-editor-message hidden"></div>
                     </div>
                 </details>
-
-                <label class="field">
-                    <span>Remote Pattern</span>
-                    <input id="patternInput" type="text" value="*.csv" autocomplete="off">
-                </label>
-
-                <div class="field">
-                    <span>DBC Files</span>
-                    <div id="dbcList" class="dbc-list"></div>
-                </div>
-
-                <div class="action-grid">
-                    <button id="listButton" class="secondary-action" type="button">Refresh List</button>
-                    <button id="pullButton" class="primary-action" type="button">Pull Data</button>
-                    <button id="decodeButton" class="primary-action" type="button">Decode Data</button>
-                    <button id="cancelButton" class="secondary-action danger" type="button" disabled>Cancel</button>
-                </div>
-
-                <div class="folder-list">
-                    <div>
-                        <span>Undecoded</span>
-                        <code id="undecodedFolder">-</code>
-                    </div>
-                    <div>
-                        <span>Decoded</span>
-                        <code id="decodedFolder">-</code>
-                    </div>
-                </div>
             </aside>
 
-            <section class="panel min-w-0">
-                <div class="panel-heading">
-                    <span>Progress</span>
-                    <strong id="percentLabel">0.0%</strong>
-                </div>
+            <!-- Right Column Container split into separate panel cards -->
+            <div class="flex flex-col gap-5 min-w-0">
+                
+                <!-- Block 1: Progress -->
+                <section class="panel min-w-0">
+                    <div class="panel-heading">
+                        <span>Progress</span>
+                        <strong id="percentLabel">0.0%</strong>
+                    </div>
 
-                <div class="progress-track" aria-hidden="true">
-                    <div id="progressFill" class="progress-fill"></div>
-                </div>
+                    <div class="progress-track" aria-hidden="true">
+                        <div id="progressFill" class="progress-fill"></div>
+                    </div>
 
-                <div class="progress-grid">
-                    <div>
-                        <span>Phase</span>
-                        <strong id="phaseLabel">Idle</strong>
-                    </div>
-                    <div>
-                        <span>Current File</span>
-                        <strong id="currentFile">-</strong>
-                    </div>
-                    <div>
-                        <span>Remote Files</span>
-                        <strong id="remoteCount">0</strong>
-                    </div>
-                    <div>
-                        <span>Downloaded</span>
-                        <strong id="downloadedCount">0</strong>
-                    </div>
-                    <div>
-                        <span>Decoded</span>
-                        <strong id="decodedCount">0</strong>
-                    </div>
-                    <div>
-                        <span>Transfer</span>
-                        <strong id="transferLabel">-</strong>
-                    </div>
-                </div>
-
-                <div class="remote-file-panel">
-                    <div class="remote-file-heading">
-                        <span>File Selection</span>
-                        <div class="remote-file-actions">
-                            <button id="selectVisibleRemoteButton" class="secondary-action compact" type="button">Select Remote Files</button>
-                            <button id="clearRemoteSelectionButton" class="secondary-action compact" type="button">Cancel Selection</button>
-                            <strong id="remoteListCount">0 files</strong>
+                    <div class="progress-grid">
+                        <div>
+                            <span>Phase</span>
+                            <strong id="phaseLabel">Idle</strong>
+                        </div>
+                        <div>
+                            <span>Current File</span>
+                            <strong id="currentFile">-</strong>
+                        </div>
+                        <div>
+                            <span>Remote CSV Files</span>
+                            <strong id="remoteCount">0</strong>
+                        </div>
+                        <div>
+                            <span>Downloaded</span>
+                            <strong id="downloadedCount">0</strong>
+                        </div>
+                        <div>
+                            <span>Decoded</span>
+                            <strong id="decodedCount">0</strong>
+                        </div>
+                        <div>
+                            <span>Transfer Status</span>
+                            <strong id="transferLabel">-</strong>
                         </div>
                     </div>
-                    <div id="remoteFileList" class="remote-file-list">
-                        <div class="empty-state">No remote files listed</div>
-                    </div>
-                </div>
+                    <button id="cancelButton" class="secondary-action danger w-full mt-2" type="button" disabled>Cancel</button>
+                </section>
 
-                <div class="workspace-panel">
-                    <div class="workspace-heading">
-                        <span>Workspace</span>
-                        <div class="workspace-actions">
-                            <button id="selectLocalDecodeFilesButton" class="secondary-action compact" type="button">Select Decode Files</button>
-                            <button id="cancelLocalSelectionButton" class="secondary-action compact" type="button">Cancel Selection</button>
-                            <button id="refreshWorkspaceButton" class="secondary-action compact" type="button">Refresh</button>
-                            <strong id="workspaceTreeCount">0 items</strong>
+                <!-- Block 2: File Selection -->
+                <section class="panel min-w-0">
+                    <div class="remote-file-panel !m-0 !border-0 !p-0">
+                        <div class="panel-heading">
+                            <span>File Selection</span>
+                            <span id="remoteListCount" class="text-sky-400 text-sm">0 Files</span>
+                        </div>
+                        <div id="remoteFileList" class="remote-file-list">
+                            <div class="empty-state">No remote files listed</div>
+                        </div>
+                        <div class="remote-file-actions flex flex-col gap-2">
+                            <div class="grid grid-cols-3 gap-2 w-full">
+                                <button id="selectVisibleRemoteButton" class="secondary-action compact w-full" type="button">Select Files</button>
+                                <button id="clearRemoteSelectionButton" class="secondary-action compact w-full" type="button">Cancel Selection</button>
+                                <button id="listButton" class="secondary-action compact w-full" type="button">Refresh</button>
+                            </div>
+                            
+                            <button id="pullButton" class="primary-action compact w-full" type="button">Pull Data</button>
                         </div>
                     </div>
-                    <div id="workspaceTree" class="workspace-tree-list">
-                        <div class="empty-state">No workspace files loaded</div>
-                    </div>
-                    <div id="workspaceEditor" class="workspace-editor hidden">
-                        <div class="workspace-selection-line">
-                            <span>Selected</span>
-                            <code id="workspaceSelectedPath">-</code>
+                </section>
+
+                <!-- Block 3: Workspace -->
+                <section class="panel min-w-0">
+                    <div class="workspace-panel !m-0 !border-0 !p-0">
+                        <div class="panel-heading">
+                            <span>Workspace</span>
+                            <span id="workspaceTreeCount" class="text-sky-400 text-sm">0 items</span>
                         </div>
-
-                        <label class="field workspace-move-field">
-                            <span>Copy / Move To</span>
-                            <input id="workspaceMoveInput" type="text" autocomplete="off" placeholder="/mnt/webdav/vehical_data_EP7/">
-                        </label>
-
-                        <div class="workspace-editor-actions">
-                            <button id="copyWorkspaceButton" class="secondary-action compact" type="button" disabled>Copy</button>
-                            <button id="moveWorkspaceButton" class="secondary-action compact" type="button" disabled>Move</button>
-                            <button id="deleteWorkspaceButton" class="secondary-action compact danger" type="button" disabled>Delete</button>
+                        <div id="workspaceTree" class="workspace-tree-list">
+                            <div class="empty-state">No workspace files loaded</div>
                         </div>
+                        <div class="workspace-actions flex flex-col gap-2 py-2">
+                            <div class="grid grid-cols-3 gap-2 w-full">
+                                <button id="selectLocalDecodeFilesButton" class="secondary-action compact" type="button">Select Decode Files</button>
+                                <button id="cancelLocalSelectionButton" class="secondary-action compact" type="button">Cancel Selection</button>
+                                <button id="refreshWorkspaceButton" class="secondary-action compact" type="button">Refresh</button>
+                            </div>
 
-                        <div id="workspaceMessage" class="workspace-message hidden"></div>
+                            <button id="decodeButton" class="primary-action compact w-full" type="button">Decode Data</button>
+                        </div>
+                        <div id="workspaceEditor" class="workspace-editor hidden">
+                            <div class="workspace-selection-line">
+                                <span>Selected</span>
+                                <code id="workspaceSelectedPath">-</code>
+                            </div>
+
+                            <label class="field workspace-move-field">
+                                <span>Copy / Move To</span>
+                                <input id="workspaceMoveInput" type="text" autocomplete="off" placeholder="/mnt/webdav/vehical_data_EP7/">
+                            </label>
+
+                            <div class="workspace-editor-actions flex gap-2">
+                                <button id="copyWorkspaceButton" class="secondary-action compact flex-1" type="button" disabled>Copy</button>
+                                <button id="moveWorkspaceButton" class="secondary-action compact flex-1" type="button" disabled>Move</button>
+                                <button id="deleteWorkspaceButton" class="secondary-action compact danger flex-1" type="button" disabled>Delete</button>
+                            </div>
+
+                            <div id="workspaceMessage" class="workspace-message hidden"></div>
+                        </div>
                     </div>
-                </div>
+                </section>
 
                 <div id="errorBox" class="error-box hidden"></div>
 
-                <div class="event-log" id="eventLog"></div>
-            </section>
+                <section class="panel min-w-0">
+                    <div class="panel-heading">
+                        <span>Event Log</span>
+                    </div>
+                    <div class="event-log" id="eventLog"></div>
+                </section>
+                
+            </div>
         </section>
     </main>
 </body>

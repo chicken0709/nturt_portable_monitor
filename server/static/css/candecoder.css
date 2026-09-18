@@ -2,16 +2,27 @@
     box-sizing: border-box;
 }
 
+::-webkit-scrollbar {width: 10px;}
+::-webkit-scrollbar-track {background: #09090b;}
+::-webkit-scrollbar-thumb {
+    background: #27272a;
+    border-radius: 5px;
+    border: 2px solid #09090b;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #3f3f46;
+}
+
 .header-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    margin-top: 14px;
+    margin-top: 0px;
 }
 
 .header-actions a {
     display: inline-flex;
-    min-height: 34px;
+    min-height: 30px;
     align-items: center;
     justify-content: center;
     border: 1px solid rgb(63 63 70);
@@ -248,7 +259,7 @@
 .secondary-action {
     display: inline-flex;
     min-width: 0;
-    height: 34px;
+    height: 40px;
     align-items: center;
     justify-content: center;
     border: 1px solid rgb(63 63 70);
@@ -292,9 +303,9 @@
 }
 
 .secondary-action.compact {
-    height: 28px;
+    height: 40px;
     padding: 0 8px;
-    font-size: 11px;
+    font-size: 12px;
 }
 
 .signal-picker {
@@ -464,42 +475,6 @@
     height: 40px;
 }
 
-.folder-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-top: 18px;
-    padding-top: 16px;
-    border-top: 1px solid rgb(39 39 42);
-}
-
-.folder-list div {
-    min-width: 0;
-}
-
-.folder-list span {
-    display: block;
-    color: rgb(113 113 122);
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-}
-
-.folder-list code {
-    display: block;
-    min-width: 0;
-    margin-top: 5px;
-    overflow-wrap: anywhere;
-    border: 1px solid rgb(39 39 42);
-    border-radius: 7px;
-    background: rgb(9 9 11);
-    color: rgb(212 212 216);
-    padding: 8px;
-    font-size: 11px;
-    line-height: 1.35;
-}
-
 .progress-track {
     position: relative;
     overflow: hidden;
@@ -513,7 +488,7 @@
     width: 0%;
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(90deg, rgb(14 165 233), rgb(16 185 129));
+    background: rgb(14 165 233);
     transition: width 220ms ease;
 }
 
@@ -571,10 +546,11 @@
 
 .remote-file-actions {
     display: flex;
+    margin-top: 8px;
     min-width: 0;
     flex-wrap: wrap;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: 6px;
 }
 
@@ -702,6 +678,7 @@
 }
 
 .workspace-tree-list {
+    height: 280px;
     max-height: 280px;
     overflow: auto;
     border: 1px solid rgb(39 39 42);
@@ -902,7 +879,7 @@
 }
 
 .error-box {
-    margin-top: 14px;
+    margin-top: 3px;
     border: 1px solid rgb(244 63 94 / 0.55);
     border-radius: 7px;
     background: rgb(127 29 29 / 0.3);

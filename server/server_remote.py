@@ -387,41 +387,41 @@ def _protected_api_denied(request: Request) -> JSONResponse | None:
 # FastAPI Routes
 @app.get("/", response_class=HTMLResponse)
 async def main_navigation(request: Request):
-    return templates.TemplateResponse("main_navigation.html", {"request": request})
+    return templates.TemplateResponse(request, "main_navigation.html", {"request": request})
 
 @app.get("/racing", response_class=HTMLResponse)
 async def racing_dashboard(request: Request):
-    return templates.TemplateResponse("racing_dashboard.html", {"request": request})
+    return templates.TemplateResponse(request, "racing_dashboard.html", {"request": request})
 
 @app.get("/AMS", response_class=HTMLResponse)
 async def ams_dashboard(request: Request):
-    return templates.TemplateResponse("battery_dashboard.html", {"request": request})
+    return templates.TemplateResponse(request, "battery_dashboard.html", {"request": request})
 
 @app.get("/TQ", response_class=HTMLResponse)
 async def tq_dashboard(request: Request):
-    return templates.TemplateResponse("torque_dashboard.html", {"request": request})
+    return templates.TemplateResponse(request, "torque_dashboard.html", {"request": request})
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def chart_dashboard(request: Request):
-    return templates.TemplateResponse("dynamic_dashboard.html", {"request": request})
+    return templates.TemplateResponse(request, "dynamic_dashboard.html", {"request": request})
 
 @app.get("/IMU", response_class=HTMLResponse)
 async def imu_dashboard(request: Request):
-    return templates.TemplateResponse("IMU_dashboard.html", {"request": request})
+    return templates.TemplateResponse(request, "IMU_dashboard.html", {"request": request})
 
 @app.get("/xsens", response_class=HTMLResponse)
 async def xsens_dashboard(request: Request):
-    return templates.TemplateResponse("xsens_dashboard.html", {"request": request})
+    return templates.TemplateResponse(request, "xsens_dashboard.html", {"request": request})
 
 @app.get("/csv_control", response_class=HTMLResponse)
 async def csv_control(request: Request):
-    return templates.TemplateResponse("csv_control.html", {"request": request})
+    return templates.TemplateResponse(request, "csv_control.html", {"request": request})
 
 @app.get("/candecoder", response_class=HTMLResponse)
 async def candecoder(request: Request):
     if not _is_adminshell_request_authenticated(request):
         return _adminshell_redirect(request)
-    return templates.TemplateResponse("candecoder.html", {"request": request})
+    return templates.TemplateResponse(request, "candecoder.html", {"request": request})
 
 @app.get("/adminshell/login", response_class=HTMLResponse)
 async def adminshell_login(request: Request):
@@ -429,6 +429,7 @@ async def adminshell_login(request: Request):
     if _is_adminshell_request_authenticated(request):
         return RedirectResponse(next_path, status_code=303)
     return templates.TemplateResponse(
+        request,
         "adminshell_login.html",
         {
             "request": request,
@@ -456,6 +457,7 @@ async def adminshell_login_submit(request: Request):
         )
         return response
     return templates.TemplateResponse(
+        request,
         "adminshell_login.html",
         {
             "request": request,
@@ -476,7 +478,7 @@ async def adminshell_logout():
 async def adminshell(request: Request):
     if not _is_adminshell_request_authenticated(request):
         return _adminshell_redirect(request)
-    return templates.TemplateResponse("adminshell.html", {"request": request})
+    return templates.TemplateResponse(request, "adminshell.html", {"request": request})
 
 @app.get('/api/data')
 async def get_data():
@@ -739,31 +741,6 @@ async def cancel_candecoder_task(request: Request):
     if not can_server:
         return {'error': 'CAN server not initialized'}
     return await can_server.candecoder_sync.cancel()
-
-@app.post('/api/candecoder/start')
-async def start_candecoder(request: Request):
-    denied = _protected_api_denied(request)
-    if denied:
-        return denied
-    if not can_server:
-        return {'error': 'CAN server not initialized'}
-    try:
-        data = await request.json()
-    except Exception:
-        data = {}
-    return await can_server.candecoder_sync.start(
-        template_name=data.get('template_name'),
-        pattern=data.get('pattern') or '*.csv',
-        source_mode='ssh',
-        rpi_host=data.get('rpi_host'),
-        rpi_user=data.get('rpi_user') or 'pi',
-        rpi_password=data.get('rpi_password'),
-        remote_log_dir=data.get('remote_log_dir'),
-        dbc_names=data.get('dbc_names') or [],
-        selected_relative_paths=data.get('selected_relative_paths') or [],
-        local_selected_relative_paths=data.get('selected_local_relative_paths') or data.get('selected_relative_paths') or [],
-        output_folder_name=data.get('output_folder_name'),
-    )
 
 @app.post('/api/csv/request_list')
 async def request_csv_list():

@@ -1,18 +1,20 @@
 from __future__ import annotations
 
-import asyncio
-import base64
-import fnmatch
-import json
 import os
-import posixpath
-import shutil
+import json
 import stat
-import threading
 import time
 import uuid
-from dataclasses import dataclass
+import base64
+import shutil
+import asyncio
+import fnmatch
+import paramiko
+import threading
+import posixpath
+
 from datetime import datetime
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Awaitable, Callable
 
@@ -29,26 +31,17 @@ from candecoder_decoder import (
     signal_items_from_set,
 )
 
-try:
-    import paramiko
-except ImportError:
-    paramiko = None
-
-
 SERVER_DIR = Path(__file__).resolve().parent
 WORKSPACE_DIR = SERVER_DIR / "candecoder_workspace"
-CACHE_DIR = WORKSPACE_DIR / ".raw_cache"
-STATE_FILE = WORKSPACE_DIR / "sync_state.json"
 DEFAULT_PATTERN = "*.csv"
 CHUNK_SIZE = 256 * 1024
 DEFAULT_EXTERNAL_MOVE_ROOTS = ("/mnt/webdav",)
 EXTERNAL_MOVE_ROOTS_ENV = "CANDECODER_EXTERNAL_MOVE_ROOTS"
 DEFAULT_REMOTE_LOG_DIR = "/home/nturt/Desktop/RPI_Desktop/LOGS"
-
+REMOTE_ROOT_NAMES = ("LOGS", "undecoded", "candecoder_workspace")
 
 class OperationCancelled(Exception):
     pass
-
 
 @dataclass(frozen=True)
 class SourceConfig:
@@ -66,7 +59,6 @@ class SourceConfig:
             "remote_log_dir": self.remote_log_dir,
         }
 
-
 @dataclass
 class DownloadSession:
     request_id: str
@@ -79,14 +71,11 @@ class DownloadSession:
     received: int = 0
     last_emit: float = 0.0
 
-
 def _now_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
-
 def _safe_component(value: str) -> str:
     return safe_suffix(value) or "item"
-
 
 def safe_local_relative_path(value: str) -> Path:
     raw = (value or "").replace("\\", "/")
@@ -100,8 +89,7 @@ def safe_local_relative_path(value: str) -> Path:
         parts = [_safe_component(Path(raw).name or "log.csv")]
     return Path(*parts)
 
-
-def _normalize_relative_selection(value: str | None, *, root_names: tuple[str, ...] = ("LOGS", "undecoded", "candecoder_workspace")) -> str:
+def _normalize_relative_selection(value: str | None, *, root_names: tuple[str, ...] = REMOTE_ROOT_NAMES) -> str:
     text = str(value or "").replace("\\", "/").strip().lstrip("/")
     if not text or text in {".", "/"}:
         return ""
@@ -111,6 +99,22 @@ def _normalize_relative_selection(value: str | None, *, root_names: tuple[str, .
         parts = parts[1:]
     return "/".join(parts)
 
+def _normalize_selection_paths(paths: list[str] | None, *, root_names: tuple[str, ...] = REMOTE_ROOT_NAMES) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw_path in paths or []:
+        text = _normalize_relative_selection(raw_path, root_names=root_names)
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        normalized.append(text)
+    return normalized
+
+def _is_csv_file(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    name = path.name.lower()
+    return name.endswith(".csv") and not name.endswith("_decoded.csv")
 
 def format_bytes(value: int) -> str:
     amount = float(value or 0)
@@ -119,7 +123,6 @@ def format_bytes(value: int) -> str:
             return f"{amount:.1f} {unit}" if unit != "B" else f"{int(amount)} B"
         amount /= 1024
     return f"{amount:.1f} GB"
-
 
 class CANDecoderSyncService:
     def __init__(
@@ -296,7 +299,7 @@ class CANDecoderSyncService:
     ) -> dict[str, Any]:
         clean_pattern = (pattern or DEFAULT_PATTERN).strip() or DEFAULT_PATTERN
         source = self._build_source(source_mode, rpi_host, rpi_user, rpi_password, remote_log_dir)
-        clean_selected_paths = self._clean_selected_relative_paths(selected_relative_paths)
+        clean_selected_paths = _normalize_selection_paths(selected_relative_paths)
         return await self._queue_operation(
             "pull",
             "Queued CAN log pull",
@@ -315,8 +318,8 @@ class CANDecoderSyncService:
     ) -> dict[str, Any]:
         clean_template = (template_name or "").strip() or None
         clean_dbc_names = [str(name).strip() for name in (dbc_names or []) if str(name).strip()]
-        clean_selected_paths = self._clean_selected_relative_paths(selected_relative_paths)
-        clean_local_selected_paths = self._clean_selected_relative_paths(local_selected_relative_paths)
+        clean_selected_paths = _normalize_selection_paths(selected_relative_paths)
+        clean_local_selected_paths = _normalize_selection_paths(local_selected_relative_paths)
         clean_output_folder = self._clean_output_folder_name(output_folder_name)
         return await self._queue_operation(
             "decode",
@@ -330,46 +333,6 @@ class CANDecoderSyncService:
                 clean_output_folder,
             ),
             template_name=clean_template,
-            dbc_names=clean_dbc_names,
-        )
-
-    async def start(
-        self,
-        template_name: str | None = None,
-        pattern: str | None = None,
-        source_mode: str | None = None,
-        rpi_host: str | None = None,
-        rpi_user: str | None = None,
-        rpi_password: str | None = None,
-        remote_log_dir: str | None = None,
-        dbc_names: list[str] | None = None,
-        selected_relative_paths: list[str] | None = None,
-        local_selected_relative_paths: list[str] | None = None,
-        output_folder_name: str | None = None,
-    ) -> dict[str, Any]:
-        clean_template = (template_name or "").strip() or None
-        clean_pattern = (pattern or DEFAULT_PATTERN).strip() or DEFAULT_PATTERN
-        source = self._build_source(source_mode, rpi_host, rpi_user, rpi_password, remote_log_dir)
-        clean_dbc_names = [str(name).strip() for name in (dbc_names or []) if str(name).strip()]
-        clean_selected_paths = self._clean_selected_relative_paths(selected_relative_paths)
-        clean_local_selected_paths = self._clean_selected_relative_paths(local_selected_relative_paths)
-        clean_output_folder = self._clean_output_folder_name(output_folder_name)
-        return await self._queue_operation(
-            "sync_decode",
-            "Queued CAN log pull and decode",
-            lambda task_id: self._run_sync_decode(
-                task_id,
-                clean_template,
-                clean_pattern,
-                source,
-                clean_dbc_names,
-                clean_selected_paths,
-                clean_local_selected_paths,
-                clean_output_folder,
-            ),
-            template_name=clean_template,
-            pattern=clean_pattern,
-            source=source,
             dbc_names=clean_dbc_names,
         )
 
@@ -433,8 +396,6 @@ class CANDecoderSyncService:
         return False
 
     def _validate_ssh_source(self, source: SourceConfig) -> None:
-        if paramiko is None:
-            raise RuntimeError("SSH/SFTP mode requires paramiko. Run: pip install -r server/requirements.txt")
         if not source.rpi_host:
             raise RuntimeError("RPI IP/host is required for SSH/SFTP mode.")
         if not source.rpi_user:
@@ -512,17 +473,6 @@ class CANDecoderSyncService:
         async def body() -> None:
             self._validate_source_ready(source)
             remote_files = await self._list_remote_files(source, pattern, found_percent=95.0)
-            manifest_path = self._write_manifest(
-                "manifest_list.json",
-                {
-                    "task_id": task_id,
-                    "operation": "list",
-                    "created_at": _now_iso(),
-                    "pattern": pattern,
-                    "source": source.public_dict(),
-                    "remote_files": remote_files,
-                },
-            )
             await self._emit(
                 "success",
                 f"Listed {len(remote_files)} remote CSV log file(s)",
@@ -533,7 +483,7 @@ class CANDecoderSyncService:
                 finished_at=_now_iso(),
                 counts={**self.status["counts"], "remote_files": len(remote_files)},
                 remote_files=remote_files,
-                progress={"remote_files": len(remote_files), "manifest": str(manifest_path)},
+                progress={"remote_files": len(remote_files)},
             )
 
         await self._run_operation(body)
@@ -553,26 +503,9 @@ class CANDecoderSyncService:
             if not remote_files:
                 raise RuntimeError("No remote CSV files matched the selected files.")
 
-            state = self._load_state()
-            downloaded, skipped = await self._sync_raw_files(remote_files, raw_dir, state, source, percent_end=100.0)
+            downloaded, skipped = await self._sync_raw_files(remote_files, raw_dir, source, percent_end=100.0)
             self._check_cancelled()
-            self._write_state(state)
 
-            manifest_path = self._write_manifest(
-                "manifest_pull.json",
-                {
-                    "task_id": task_id,
-                    "operation": "pull",
-                    "created_at": _now_iso(),
-                    "pattern": pattern,
-                    "source": source.public_dict(),
-                    "selected_relative_paths": selected_relative_paths,
-                    "folders": folders,
-                    "remote_files": remote_files,
-                    "downloaded_files": downloaded,
-                    "download_skipped": skipped,
-                },
-            )
             await self._emit(
                 "success",
                 "CAN log pull complete",
@@ -590,7 +523,7 @@ class CANDecoderSyncService:
                 remote_files=remote_files,
                 local_raw_files=[str(self._raw_path(raw_dir, entry)) for entry in remote_files if self._raw_path(raw_dir, entry).exists()],
                 workspace=self.workspace_tree(),
-                progress={"manifest": str(manifest_path), "decoded_folder": str(decoded_dir)},
+                progress={"decoded_folder": str(decoded_dir)},
             )
 
         await self._run_operation(body)
@@ -607,7 +540,7 @@ class CANDecoderSyncService:
         async def body() -> None:
             raw_dir, decoded_dir, folders, folder_suffix = await self._prepare_folders(template_name, output_folder_name)
             dbc_paths, selected = self._prepare_decode_inputs(template_name, dbc_names)
-            decode_target_paths = self._clean_selected_relative_paths(local_selected_relative_paths or selected_relative_paths)
+            decode_target_paths = _normalize_selection_paths(local_selected_relative_paths or selected_relative_paths)
             raw_files = self._selected_raw_files(raw_dir, decode_target_paths)
             await self._emit(
                 "info",
@@ -631,24 +564,6 @@ class CANDecoderSyncService:
                 percent_start=5.0,
                 percent_end=100.0,
             )
-            manifest_path = self._write_manifest(
-                f"manifest_decode{folder_suffix}.json",
-                {
-                    "task_id": task_id,
-                    "operation": "decode",
-                    "created_at": _now_iso(),
-                    "template_name": template_name,
-                    "output_folder_name": output_folder_name,
-                    "selected_relative_paths": selected_relative_paths,
-                    "local_selected_relative_paths": decode_target_paths,
-                    "folders": folders,
-                    "dbc_paths": [str(path) for path in dbc_paths],
-                    "raw_files": [str(path) for path in raw_files],
-                    "decoded_files": [row.get("output") for row in decoded],
-                    "decode_skipped": decode_skipped,
-                    "stats": decoded,
-                },
-            )
             await self._emit(
                 "success",
                 "CAN log decode complete",
@@ -659,91 +574,7 @@ class CANDecoderSyncService:
                 finished_at=_now_iso(),
                 counts={**self.status["counts"], "decoded": len(decoded), "decode_skipped": decode_skipped},
                 folders=folders,
-                progress={"manifest": str(manifest_path)},
-            )
-
-        await self._run_operation(body)
-
-    async def _run_sync_decode(
-        self,
-        task_id: str,
-        template_name: str | None,
-        pattern: str,
-        source: SourceConfig,
-        dbc_names: list[str],
-        selected_relative_paths: list[str],
-        local_selected_relative_paths: list[str],
-        output_folder_name: str | None,
-    ) -> None:
-        async def body() -> None:
-            self._validate_source_ready(source)
-            raw_dir, decoded_dir, folders, folder_suffix = await self._prepare_folders(template_name, output_folder_name)
-            dbc_paths, selected = self._prepare_decode_inputs(template_name, dbc_names)
-
-            remote_files = await self._list_remote_files(source, pattern, found_percent=8.0)
-            remote_files = await self._apply_pull_selection(remote_files, selected_relative_paths)
-            if not remote_files:
-                raise RuntimeError("No remote CSV files matched the selected files.")
-
-            state = self._load_state()
-            downloaded, skipped = await self._sync_raw_files(remote_files, raw_dir, state, source, percent_end=55.0)
-            self._check_cancelled()
-            self._write_state(state)
-
-            decode_target_paths = self._clean_selected_relative_paths(local_selected_relative_paths or selected_relative_paths)
-            raw_files = [self._raw_path(raw_dir, entry) for entry in remote_files if self._raw_path(raw_dir, entry).exists()]
-            if decode_target_paths:
-                raw_files = self._selected_raw_files(raw_dir, decode_target_paths)
-            decoded, decode_skipped = await self._decode_raw_files(
-                raw_files=raw_files,
-                raw_dir=raw_dir,
-                decoded_dir=decoded_dir,
-                dbc_paths=dbc_paths,
-                selected=selected,
-                percent_start=55.0,
-                percent_end=100.0,
-            )
-
-            manifest_path = self._write_manifest(
-                f"manifest{folder_suffix}.json",
-                {
-                    "task_id": task_id,
-                    "operation": "sync_decode",
-                    "created_at": _now_iso(),
-                    "template_name": template_name,
-                    "output_folder_name": output_folder_name,
-                    "pattern": pattern,
-                    "source": source.public_dict(),
-                    "selected_relative_paths": selected_relative_paths,
-                    "local_selected_relative_paths": decode_target_paths,
-                    "folders": folders,
-                    "dbc_paths": [str(path) for path in dbc_paths],
-                    "remote_files": remote_files,
-                    "downloaded_files": downloaded,
-                    "download_skipped": skipped,
-                    "decoded_files": [row.get("output") for row in decoded],
-                    "decode_skipped": decode_skipped,
-                    "stats": decoded,
-                },
-            )
-            await self._emit(
-                "success",
-                "CAN decoder pull and decode complete",
-                state="succeeded",
-                phase="complete",
-                percent=100.0,
-                message="Complete",
-                finished_at=_now_iso(),
-                counts={
-                    **self.status["counts"],
-                    "downloaded": len(downloaded),
-                    "download_skipped": len(skipped),
-                    "decoded": len(decoded),
-                    "decode_skipped": decode_skipped,
-                },
-                folders=folders,
-                remote_files=remote_files,
-                progress={"manifest": str(manifest_path)},
+                progress={},
             )
 
         await self._run_operation(body)
@@ -799,12 +630,10 @@ class CANDecoderSyncService:
         decoded_dir = WORKSPACE_DIR / f"decoded{folder_suffix}"
         raw_dir.mkdir(parents=True, exist_ok=True)
         decoded_dir.mkdir(parents=True, exist_ok=True)
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
         folders = {
             "workspace": str(WORKSPACE_DIR),
             "undecoded": str(raw_dir),
             "decoded": str(decoded_dir),
-            "cache": str(CACHE_DIR),
         }
         await self._emit(
             "info",
@@ -838,36 +667,21 @@ class CANDecoderSyncService:
         if not raw_dir.exists():
             return []
         return sorted(
-            [
-                path
-                for path in raw_dir.rglob("*.csv")
-                if path.is_file() and not path.name.lower().endswith("_decoded.csv")
-            ],
+            [path for path in raw_dir.rglob("*.csv") if _is_csv_file(path)],
             key=lambda path: str(path.relative_to(raw_dir)).lower(),
         )
-
-    def _normalize_local_raw_selection(self, selected_relative_paths: list[str]) -> list[str]:
-        normalized: list[str] = []
-        seen: set[str] = set()
-        for relative_path in selected_relative_paths:
-            clean = _normalize_relative_selection(relative_path, root_names=("candecoder_workspace", "undecoded"))
-            if not clean or clean in seen:
-                continue
-            seen.add(clean)
-            normalized.append(clean)
-        return normalized
 
     def _expand_local_raw_selection(self, raw_dir: Path, selected_relative_paths: list[str]) -> list[str]:
         expanded: list[str] = []
         seen: set[str] = set()
-        for relative_path in self._normalize_local_raw_selection(selected_relative_paths):
+        for relative_path in _normalize_selection_paths(selected_relative_paths, root_names=("candecoder_workspace", "undecoded")):
             local_path = raw_dir / safe_local_relative_path(relative_path)
             if local_path.is_dir():
                 matches = sorted(
                     (
                         str(path.relative_to(raw_dir)).replace("\\", "/")
                         for path in local_path.iterdir()
-                        if path.is_file() and path.name.lower().endswith(".csv") and not path.name.lower().endswith("_decoded.csv")
+                        if path.is_file() and _is_csv_file(path)
                     ),
                     key=lambda value: value.lower(),
                 )
@@ -877,7 +691,7 @@ class CANDecoderSyncService:
                     seen.add(item)
                     expanded.append(item)
                 continue
-            if local_path.exists() and local_path.is_file() and local_path.name.lower().endswith(".csv") and not local_path.name.lower().endswith("_decoded.csv"):
+            if local_path.exists() and _is_csv_file(local_path):
                 key = str(local_path.relative_to(raw_dir)).replace("\\", "/")
                 if key in seen:
                     continue
@@ -895,6 +709,7 @@ class CANDecoderSyncService:
         expanded_paths = self._expand_local_raw_selection(raw_dir, selected_relative_paths)
         if not expanded_paths:
             return []
+
         raw_files: list[Path] = []
         missing: list[str] = []
         seen: set[str] = set()
@@ -909,7 +724,7 @@ class CANDecoderSyncService:
             if not raw_path.exists() or not raw_path.is_file():
                 missing.append(relative_path)
                 continue
-            if not raw_path.name.lower().endswith(".csv") or raw_path.name.lower().endswith("_decoded.csv"):
+            if not _is_csv_file(raw_path):
                 continue
             raw_files.append(raw_path)
         if missing:
@@ -917,17 +732,6 @@ class CANDecoderSyncService:
             suffix = "..." if len(missing) > 5 else ""
             raise RuntimeError(f"Selected file(s) have not been pulled yet: {preview}{suffix}")
         return sorted(raw_files, key=lambda path: str(path.relative_to(raw_dir)).lower())
-
-    def _clean_selected_relative_paths(self, paths: list[str] | None) -> list[str]:
-        cleaned: list[str] = []
-        seen: set[str] = set()
-        for raw_path in paths or []:
-            text = _normalize_relative_selection(raw_path)
-            if not text or text in seen:
-                continue
-            seen.add(text)
-            cleaned.append(text)
-        return cleaned
 
     async def _apply_pull_selection(
         self,
@@ -970,13 +774,6 @@ class CANDecoderSyncService:
             progress={"remote_files": len(filtered), "selection": selection_note},
         )
         return filtered
-
-    def _write_manifest(self, filename: str, manifest: dict[str, Any]) -> Path:
-        self._check_cancelled()
-        WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
-        manifest_path = WORKSPACE_DIR / filename
-        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-        return manifest_path
 
     def workspace_tree(self, max_entries: int = 2000) -> dict[str, Any]:
         limit = max(1, min(int(max_entries or 2000), 5000))
@@ -1533,7 +1330,6 @@ class CANDecoderSyncService:
         self,
         remote_files: list[dict[str, Any]],
         raw_dir: Path,
-        state: dict[str, Any],
         source: SourceConfig,
         percent_end: float = 55.0,
     ) -> tuple[list[str], list[str]]:
@@ -1541,17 +1337,7 @@ class CANDecoderSyncService:
         skipped: list[str] = []
         for entry in remote_files:
             self._check_cancelled()
-            if self._raw_is_current(entry, raw_dir):
-                raw_path = self._raw_path(raw_dir, entry)
-                self._ensure_cache_from_raw(entry, raw_path)
-                self._record_synced_file(state, entry)
-                skipped.append(str(entry["relative_path"]))
-            elif self._cache_is_current(entry, state):
-                self._copy_cache_to_raw(entry, raw_dir)
-                self._record_synced_file(state, entry)
-                skipped.append(str(entry["relative_path"]))
-            else:
-                to_download.append(entry)
+            to_download.append(entry)
 
         total_bytes = sum(int(entry.get("size") or 0) for entry in to_download)
         copied_before = 0
@@ -1571,7 +1357,7 @@ class CANDecoderSyncService:
 
         await self._emit(
             "info",
-            f"Downloading {len(to_download)} changed or missing file(s)",
+            f"Downloading {len(to_download)} file(s)",
             phase="downloading",
             percent=10.0,
             message=f"Downloading 0/{len(to_download)}",
@@ -1590,14 +1376,12 @@ class CANDecoderSyncService:
             }
             self._check_cancelled()
             if source.mode == "ssh":
-                cache_path = await self._download_ssh_file(entry, source)
+                final_path = await self._download_ssh_file(entry, source, raw_dir)
             else:
-                cache_path = await self._download_file(entry)
+                final_path = await self._download_file(entry, raw_dir)
             self._check_cancelled()
-            copied_before += cache_path.stat().st_size if cache_path.exists() else int(entry.get("size") or 0)
-            self._record_synced_file(state, entry, cache_path)
-            raw_path = self._copy_cache_to_raw(entry, raw_dir)
-            downloaded.append(str(raw_path))
+            copied_before += final_path.stat().st_size if final_path.exists() else int(entry.get("size") or 0)
+            downloaded.append(str(final_path))
             await self._emit(
                 "info",
                 f"Downloaded {entry['name']}",
@@ -1618,9 +1402,9 @@ class CANDecoderSyncService:
 
         return downloaded, skipped
 
-    async def _download_ssh_file(self, entry: dict[str, Any], source: SourceConfig) -> Path:
+    async def _download_ssh_file(self, entry: dict[str, Any], source: SourceConfig, raw_dir: Path) -> Path:
         self._check_cancelled()
-        final_path = self._cache_path(entry)
+        final_path = self._raw_path(raw_dir, entry)
         temp_path = final_path.with_name(f"{final_path.name}.{uuid.uuid4().hex}.part")
         final_path.parent.mkdir(parents=True, exist_ok=True)
         if temp_path.exists():
@@ -1715,11 +1499,11 @@ class CANDecoderSyncService:
             self._set_active_ssh_client(None)
             client.close()
 
-    async def _download_file(self, entry: dict[str, Any]) -> Path:
+    async def _download_file(self, entry: dict[str, Any], raw_dir: Path) -> Path:
         self._check_cancelled()
         request_id = uuid.uuid4().hex
         relative_path = str(entry["relative_path"])
-        final_path = self._cache_path(entry)
+        final_path = self._raw_path(raw_dir, entry)
         temp_path = final_path.with_name(f"{final_path.name}.{request_id}.part")
         final_path.parent.mkdir(parents=True, exist_ok=True)
         if temp_path.exists():
@@ -1991,79 +1775,8 @@ class CANDecoderSyncService:
         cleaned.sort(key=lambda row: (str(row.get("relative_path") or "").lower()))
         return cleaned
 
-    def _load_state(self) -> dict[str, Any]:
-        if not STATE_FILE.exists():
-            return {"files": {}}
-        try:
-            return json.loads(STATE_FILE.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            return {"files": {}}
-
-    def _write_state(self, state: dict[str, Any]) -> None:
-        STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    def _cache_path(self, entry: dict[str, Any]) -> Path:
-        return CACHE_DIR / safe_local_relative_path(str(entry["relative_path"]))
-
     def _raw_path(self, raw_dir: Path, entry: dict[str, Any]) -> Path:
         return raw_dir / safe_local_relative_path(str(entry["relative_path"]))
-
-    def _cache_is_current(self, entry: dict[str, Any], state: dict[str, Any]) -> bool:
-        cache_path = self._cache_path(entry)
-        if not cache_path.exists():
-            return False
-        expected_size = int(entry.get("size") or 0)
-        if expected_size and cache_path.stat().st_size != expected_size:
-            return False
-        record = state.get("files", {}).get(str(entry["relative_path"]))
-        if not record:
-            return expected_size == 0 or cache_path.stat().st_size == expected_size
-        same_size = int(record.get("size") or 0) == expected_size
-        same_mtime = int(float(record.get("mtime") or 0)) == int(float(entry.get("mtime") or 0))
-        return same_size and same_mtime
-
-    def _path_matches_remote(self, path: Path, entry: dict[str, Any]) -> bool:
-        if not path.exists() or not path.is_file():
-            return False
-        expected_size = int(entry.get("size") or 0)
-        if expected_size and path.stat().st_size != expected_size:
-            return False
-        remote_mtime = float(entry.get("mtime") or 0)
-        if remote_mtime:
-            return int(path.stat().st_mtime) == int(remote_mtime)
-        return True
-
-    def _raw_is_current(self, entry: dict[str, Any], raw_dir: Path) -> bool:
-        return self._path_matches_remote(self._raw_path(raw_dir, entry), entry)
-
-    def _ensure_cache_from_raw(self, entry: dict[str, Any], raw_path: Path) -> Path:
-        cache_path = self._cache_path(entry)
-        if self._path_matches_remote(cache_path, entry):
-            return cache_path
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(raw_path, cache_path)
-        return cache_path
-
-    def _record_synced_file(self, state: dict[str, Any], entry: dict[str, Any], cache_path: Path | None = None) -> None:
-        resolved_cache_path = cache_path or self._cache_path(entry)
-        state.setdefault("files", {})[str(entry["relative_path"])] = {
-            "relative_path": entry["relative_path"],
-            "remote_path": entry.get("path"),
-            "size": int(entry.get("size") or 0),
-            "mtime": float(entry.get("mtime") or 0),
-            "cache_path": str(resolved_cache_path),
-            "synced_at": _now_iso(),
-        }
-
-    def _copy_cache_to_raw(self, entry: dict[str, Any], raw_dir: Path) -> Path:
-        source = self._cache_path(entry)
-        destination = self._raw_path(raw_dir, entry)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        if self._path_matches_remote(destination, entry):
-            return destination
-        shutil.copy2(source, destination)
-        return destination
 
     def _download_percent(
         self,

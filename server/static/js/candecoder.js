@@ -38,8 +38,6 @@ const eventLog = document.getElementById('eventLog');
 const errorBox = document.getElementById('errorBox');
 const taskState = document.getElementById('taskState');
 const vehicleCount = document.getElementById('vehicleCount');
-const undecodedFolder = document.getElementById('undecodedFolder');
-const decodedFolder = document.getElementById('decodedFolder');
 const remoteListCount = document.getElementById('remoteListCount');
 const remoteFileList = document.getElementById('remoteFileList');
 const selectVisibleRemoteButton = document.getElementById('selectVisibleRemoteButton');
@@ -71,7 +69,6 @@ let editorSelectedSignals = new Set();
 let templateTextDirty = false;
 let remoteRows = [];
 let selectedRemotePaths = new Set();
-let expandedRemoteDirectories = new Set();
 let lastRemoteTreeSignature = '';
 let remoteSelectionMode = false;
 let selectedLocalPaths = new Set();
@@ -439,7 +436,7 @@ function renderRemoteTreeNode(node, level = 0) {
             </summary>
         `;
         return `
-            <details class="workspace-node workspace-directory ${selectionModeClass}" data-remote-path="${escapeHtml(relativePath || '')}" ${level === 0 || expandedRemoteDirectories.has(relativePath) ? 'open' : ''}>
+            <details class="workspace-node workspace-directory ${selectionModeClass}" data-remote-path="${escapeHtml(relativePath || '')}" ${level === 0 ? 'open' : ''}>
                 ${summary}
                 ${children ? `<div class="workspace-children">${children}</div>` : ''}
             </details>
@@ -456,19 +453,15 @@ function renderRemoteTreeNode(node, level = 0) {
     `;
 }
 
-function renderRemoteFiles(files, force = false) {
+function renderRemoteFiles(files) {
     const nextRows = Array.isArray(files) ? files : [];
     const nextSignature = [...new Set(
         nextRows.map((file) => normalizeRemotePath(remoteFileKey(file))).filter(Boolean)
     )].sort().join('|');
-    const isSameList = nextSignature === lastRemoteTreeSignature && !force;
+    const isSameList = nextSignature === lastRemoteTreeSignature;
 
     remoteRows = nextRows;
     const liveKeys = new Set(remoteRows.map(remoteFileKey).map(normalizeRemotePath).filter(Boolean));
-    const currentlyExpanded = new Set(
-        Array.from(remoteFileList.querySelectorAll('details[data-remote-path]')).map((node) => normalizeRemotePath(node.dataset.remotePath || '')).filter(Boolean)
-    );
-    expandedRemoteDirectories = new Set(Array.from(currentlyExpanded).filter(Boolean));
     selectedRemotePaths = new Set(Array.from(selectedRemotePaths).map(normalizeRemotePath).filter((key) => liveKeys.has(key) || remoteRows.some((file) => remotePathMatchesSelection(normalizeRemotePath(remoteFileKey(file)), key))));
 
     const selectedCount = expandRemoteSelectionValues().length;
@@ -490,18 +483,6 @@ function renderRemoteFiles(files, force = false) {
     const tree = buildRemoteTree(remoteRows);
     remoteFileList.innerHTML = renderRemoteTreeNode(tree);
     lastRemoteTreeSignature = nextSignature;
-
-    for (const details of remoteFileList.querySelectorAll('details[data-remote-path]')) {
-        details.addEventListener('toggle', () => {
-            const path = normalizeRemotePath(details.dataset.remotePath || '');
-            if (!path) return;
-            if (details.open) {
-                expandedRemoteDirectories.add(path);
-            } else {
-                expandedRemoteDirectories.delete(path);
-            }
-        });
-    }
 
     for (const checkbox of remoteFileList.querySelectorAll('input[data-remote-select]')) {
         checkbox.addEventListener('change', () => {
@@ -951,15 +932,13 @@ function updateStatus(rawStatus) {
     const counts = status.counts || {};
     currentFile.textContent = textOrDash(progress.current_file || progress.current_file_name);
     remoteCount.textContent = counts.remote_files ?? progress.remote_files ?? 0;
-    downloadedCount.textContent = `${counts.downloaded || 0} / ${counts.download_skipped || 0} skipped`;
-    decodedCount.textContent = `${counts.decoded || 0} / ${counts.decode_skipped || 0} skipped`;
+    downloadedCount.textContent = `${counts.downloaded || 0}`;
+    decodedCount.textContent = `${counts.decoded || 0}`;
     transferLabel.textContent = progress.current_file_label || (
         progress.total_bytes ? `${progress.downloaded_bytes || 0} / ${progress.total_bytes}` : '-'
     );
 
     vehicleCount.textContent = status.vehicle_clients ?? vehicleCount.textContent ?? '0';
-    undecodedFolder.textContent = status.folders?.undecoded || '-';
-    decodedFolder.textContent = status.folders?.decoded || '-';
     setRunningDisabled(currentTaskState === 'running' || currentTaskState === 'canceling', currentTaskState);
 
     const shouldReplaceRemoteList = status.operation === 'list' || status.phase === 'listing';
