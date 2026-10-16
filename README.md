@@ -41,6 +41,13 @@
     websockets
     packaging
 
+    - How to install chromium:
+    1. systemctl is-system-running (expected output: running)
+    1. sudo apt update
+    2. sudo apt install snapd
+    3. sudo snap install chromium
+    4. check chromium is installed by running "chromium" in terminal
+
 ### 2. Server side
 
     - Steps：

@@ -9,9 +9,11 @@ import os
 import can
 import time
 import hmac
+import signal
 import asyncio
 import hashlib
 import uvicorn
+import ipaddress
 from pathlib import Path
 from typing import List, Dict
 from packaging import version
@@ -366,6 +368,25 @@ async def get_status():
         'message_count': can_server.message_count if can_server else 0,
         'can_interfaces': can_interfaces,
     }
+
+@app.post('/api/app/exit')
+async def exit_app(request: Request):
+    client_host = request.client.host if request.client else ""
+    try:
+        is_local_request = ipaddress.ip_address(client_host).is_loopback
+        launcher_pid = int(os.environ.get("NTURT_LAUNCHER_PID", ""))
+    except (ValueError, TypeError):
+        is_local_request = False
+        launcher_pid = 0
+
+    if not is_local_request:
+        return {"error": "App exit is only available from this device."}
+    if launcher_pid <= 0 or os.getppid() != launcher_pid:
+        return {"error": "The app was not started by its desktop launcher."}
+
+    # Let the HTTP response reach the browser before the launcher closes it.
+    asyncio.get_running_loop().call_later(0.5, os.kill, launcher_pid, signal.SIGTERM)
+    return {"status": "closing"}
     
 async def start_vehicle_data_server():
     # start vehicle data server
