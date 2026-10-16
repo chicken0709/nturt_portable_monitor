@@ -33,9 +33,7 @@ ws.onmessage = (event) => {
         if (data.message_count) {
             document.getElementById('message-count').textContent = data.message_count;
         }
-        if (data.vehicle_clients !== undefined) {
-            document.getElementById('client-count').textContent = data.vehicle_clients;
-        }
+        updateCanInterfaceCount(data.can_interfaces);
     } catch (e) {
         console.error('Error parsing WebSocket data:', e);
     }
@@ -46,11 +44,17 @@ async function updateStatus() {
     try {
         const response = await fetch('/api/status');
         const status = await response.json();
-        document.getElementById('client-count').textContent = status.vehicle_clients || 0;
+        updateCanInterfaceCount(status.can_interfaces);
         document.getElementById('message-count').textContent = status.message_count || 0;
     } catch (e) {
         console.error('Failed to fetch status:', e);
     }
+}
+
+function updateCanInterfaceCount(interfaces) {
+    if (!interfaces) return;
+    const activeCount = Object.values(interfaces).filter(Boolean).length;
+    document.getElementById('can-interface-count').textContent = activeCount;
 }
 
 setInterval(updateStatus, 5000);

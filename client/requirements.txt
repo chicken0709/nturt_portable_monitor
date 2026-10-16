@@ -1,4 +1,0 @@
-python-can
-websockets
-packaging
-asyncio

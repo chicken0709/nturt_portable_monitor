@@ -5,3 +5,4 @@ python-can
 jinja2
 cantools
 paramiko
+packaging
